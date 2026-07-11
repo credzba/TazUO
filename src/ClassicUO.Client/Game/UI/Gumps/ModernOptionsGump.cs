@@ -84,7 +84,7 @@ namespace ClassicUO.Game.UI.Gumps
             MainContent.AddToLeft(
                 CategoryButton(lang.ButtonCombatSpells, (int)PAGE.CombatSpells, MainContent.LeftWidth));
             MainContent.AddToLeft(CategoryButton(lang.ButtonCounters, (int)PAGE.Counters, MainContent.LeftWidth));
-            MainContent.AddToLeft(CategoryButton(lang.ButtonInfobar, (int)PAGE.InfoBar, MainContent.LeftWidth));
+            MainContent.AddToLeft(CategoryButton(lang.ButtonInfoBar, (int)PAGE.InfoBar, MainContent.LeftWidth));
             MainContent.AddToLeft(CategoryButton(lang.ButtonContainers, (int)PAGE.Containers, MainContent.LeftWidth));
             MainContent.AddToLeft(
                 CategoryButton(lang.ButtonExperimental, (int)PAGE.Experimental, MainContent.LeftWidth));
@@ -805,160 +805,89 @@ namespace ClassicUO.Game.UI.Gumps
 
         private void BuildSound()
         {
-            SettingsOption s;
-
             PositionHelper.Reset();
 
-            _options.Add
-            (
-                s = new SettingsOption
-                ("",
-                    new CheckboxWithLabel(lang.GetSound.EnableSound, 0, profile.EnableSound,
-                        (b) => { profile.EnableSound = b; }), MainContent.RightWidth, (int)PAGE.Sound)
-            );
+            var scroll = new ScrollArea(0, 0, MainContent.RightWidth, MainContent.Height)
+            {
+                CanMove = true,
+                AcceptMouseInput = true
+            };
+            _options.Add(new SettingsOption("", scroll, MainContent.RightWidth, (int)PAGE.Sound));
 
-            PositionHelper.PositionControl(s.FullControl);
+            Control c;
+
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.EnableSound, 0, profile.EnableSound,
+                (b) => { profile.EnableSound = b; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.Indent();
 
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new SliderWithLabel(lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
-                        profile.SoundVolume, (i) => { profile.SoundVolume = i; }),
-                    MainContent.RightWidth, (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new SliderWithLabel(lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
+                profile.SoundVolume, (i) => { profile.SoundVolume = i; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.RemoveIndent();
             PositionHelper.BlankLine();
 
-
-            _options.Add
-            (
-                s = new SettingsOption
-                ("",
-                    new CheckboxWithLabel(lang.GetSound.EnableMusic, 0, profile.EnableMusic,
-                        (b) => { profile.EnableMusic = b; }), MainContent.RightWidth, (int)PAGE.Sound)
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.EnableMusic, 0, profile.EnableMusic,
+                (b) => { profile.EnableMusic = b; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.Indent();
 
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new SliderWithLabel(lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
-                        profile.MusicVolume, (i) => { profile.MusicVolume = i; }),
-                    MainContent.RightWidth, (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new SliderWithLabel(lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
+                profile.MusicVolume, (i) => { profile.MusicVolume = i; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.RemoveIndent();
             PositionHelper.BlankLine();
 
-
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new CheckboxWithLabel(lang.GetSound.LoginMusic, 0, Settings.GlobalSettings.LoginMusic,
-                        (b) => { Settings.GlobalSettings.LoginMusic = b; }),
-                    MainContent.RightWidth, (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.LoginMusic, 0, Settings.GlobalSettings.LoginMusic,
+                (b) => { Settings.GlobalSettings.LoginMusic = b; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.Indent();
 
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new SliderWithLabel
-                    (
-                        lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
-                        Settings.GlobalSettings.LoginMusicVolume,
-                        (i) => { Settings.GlobalSettings.LoginMusicVolume = i; }
-                    ), MainContent.RightWidth, (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new SliderWithLabel(
+                lang.GetSound.SharedVolume, 0, ThemeSettings.SLIDER_WIDTH, 0, 100,
+                Settings.GlobalSettings.LoginMusicVolume,
+                (i) => { Settings.GlobalSettings.LoginMusicVolume = i; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.RemoveIndent();
             PositionHelper.BlankLine();
 
-
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new CheckboxWithLabel(lang.GetSound.PlayFootsteps, 0, profile.EnableFootstepsSound,
-                        (b) => { profile.EnableFootstepsSound = b; }), MainContent.RightWidth,
-                    (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.PlayFootsteps, 0, profile.EnableFootstepsSound,
+                (b) => { profile.EnableFootstepsSound = b; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.BlankLine();
 
-
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new CheckboxWithLabel(lang.GetSound.CombatMusic, 0, profile.EnableCombatMusic,
-                        (b) => { profile.EnableCombatMusic = b; }), MainContent.RightWidth,
-                    (int)PAGE.Sound
-                )
-            );
-
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = new CheckboxWithLabel(TazLang.Get("sound_play_rain", "Play rain sound"), 0, profile.EnableRainSound,
+                (b) => { profile.EnableRainSound = b; }));
+            PositionHelper.PositionControl(c);
             PositionHelper.BlankLine();
 
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.CombatMusic, 0, profile.EnableCombatMusic,
+                (b) => { profile.EnableCombatMusic = b; }));
+            PositionHelper.PositionControl(c);
+            PositionHelper.BlankLine();
 
-            _options.Add
-            (
-                s = new SettingsOption
-                (
-                    "",
-                    new CheckboxWithLabel(lang.GetSound.BackgroundMusic, 0, profile.ReproduceSoundsInBackground,
-                        (b) => { profile.ReproduceSoundsInBackground = b; }),
-                    MainContent.RightWidth, (int)PAGE.Sound
-                )
-            );
+            scroll.Add(c = new CheckboxWithLabel(lang.GetSound.BackgroundMusic, 0, profile.ReproduceSoundsInBackground,
+                (b) => { profile.ReproduceSoundsInBackground = b; }));
+            PositionHelper.PositionControl(c);
 
-            PositionHelper.PositionControl(s.FullControl);
-
-            BuildVoiceRecognition();
+            BuildVoiceRecognition(scroll);
         }
 
-        private void BuildVoiceRecognition()
+        private void BuildVoiceRecognition(ScrollArea scroll)
         {
-            SettingsOption s;
             ModernOptionsGumpLanguage.TazUO voiceLang = lang.GetTazUO;
             VoiceRecognitionManager voiceManager = VoiceRecognitionManager.Instance;
 
             PositionHelper.BlankLine();
             PositionHelper.BlankLine();
 
-            // Section header
-            var header = TextBox.GetOne(voiceLang.VoiceRecognition, ThemeSettings.FONT,
-                ThemeSettings.STANDARD_TEXT_SIZE + 2, ThemeSettings.TEXT_FONT_COLOR, TextBox.RTLOptions.Default());
-            _options.Add(s = new SettingsOption("", header, MainContent.RightWidth, (int)PAGE.Sound));
-            PositionHelper.PositionControl(s.FullControl);
+            Control c;
+
+            scroll.Add(c = TextBox.GetOne(voiceLang.VoiceRecognition, ThemeSettings.FONT,
+                ThemeSettings.STANDARD_TEXT_SIZE + 2, ThemeSettings.TEXT_FONT_COLOR, TextBox.RTLOptions.Default()));
+            PositionHelper.PositionControl(c);
             PositionHelper.BlankLine();
 
-            // Create macro button
             var createMacroBtn = new ModernButton(0, 0, 160, 30, ButtonAction.Activate, voiceLang.VoiceCreateMacro,
                 ThemeSettings.BUTTON_FONT_COLOR);
             createMacroBtn.MouseUp += (sender, e) =>
@@ -970,30 +899,28 @@ namespace ClassicUO.Game.UI.Gumps
                 macroManager.PushToBack(macro);
                 UIManager.Add(new MacroButtonGump(World, macro, Mouse.Position.X, Mouse.Position.Y));
             };
-            _options.Add(s = new SettingsOption("", createMacroBtn, MainContent.RightWidth, (int)PAGE.Sound));
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = createMacroBtn);
+            PositionHelper.PositionControl(c);
             PositionHelper.BlankLine();
 
-            // Model path input
             var modelPathInput = new InputFieldWithLabel(voiceLang.VoiceModelPath, 300, profile.VoiceModelPath,
                 onTextChange: (sender, e) =>
                 {
                     profile.VoiceModelPath = ((InputField.StbTextBox)sender).Text;
                 });
             modelPathInput.SetTooltip(voiceLang.VoiceModelPathTooltip);
-            _options.Add(s = new SettingsOption("", modelPathInput, MainContent.RightWidth, (int)PAGE.Sound));
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = modelPathInput);
+            PositionHelper.PositionControl(c);
             PositionHelper.BlankLine();
 
-            // Apply button
             var applyBtn = new ModernButton(0, 0, 160, 30, ButtonAction.Activate, voiceLang.VoiceApplyModel,
                 ThemeSettings.BUTTON_FONT_COLOR);
             applyBtn.MouseUp += (sender, e) =>
             {
                 voiceManager.Reinitialize();
             };
-            _options.Add(s = new SettingsOption("", applyBtn, MainContent.RightWidth, (int)PAGE.Sound));
-            PositionHelper.PositionControl(s.FullControl);
+            scroll.Add(c = applyBtn);
+            PositionHelper.PositionControl(c);
         }
 
         private void BuildVideo()
@@ -1330,6 +1257,28 @@ namespace ClassicUO.Game.UI.Gumps
             content.AddToRight
             (new CheckboxWithLabel(lang.GetVideo.AnimWater, isChecked: profile.AnimatedWaterEffect, valueChanged: (b) => { profile.AnimatedWaterEffect = b; }),
                 true, page);
+
+            content.BlankLine();
+
+            content.AddToRight(
+                new CheckboxWithLabel(
+                    TazLang.Get("enhanced_weather"),
+                    isChecked: profile.EnableEnhancedWeather,
+                    valueChanged: (b) =>
+                    {
+                        profile.EnableEnhancedWeather = b;
+                        World.Instance?.SwitchWeather(b);
+                    }), true, page);
+
+            content.Indent();
+
+            content.AddToRight(
+                new CheckboxWithLabel(
+                    TazLang.Get("enhanced_weather_particle_effects"),
+                    isChecked: profile.EnableWeatherEffects,
+                    valueChanged: (b) => { profile.EnableWeatherEffects = b; }), true, page);
+
+            content.RemoveIndent();
 
             content.BlankLine();
 
@@ -3275,7 +3224,7 @@ namespace ClassicUO.Game.UI.Gumps
                 (
                     World,
                     lang.GetTazUO.LowContrastHighlightStyle, 0, ThemeSettings.COMBO_BOX_WIDTH,
-                    Enum.GetNames(typeof(GridContainer.LowContrastHighlightStyle)), profile.GridHighlightLowContrastItemsStyle,
+                    Enum.GetNames(typeof(LowContrastHighlightStyle)), profile.GridHighlightLowContrastItemsStyle,
                     (i, s) => { profile.GridHighlightLowContrastItemsStyle = i; }
                 ), true, page
             );
@@ -3291,7 +3240,7 @@ namespace ClassicUO.Game.UI.Gumps
                     (i) =>
                     {
                         profile.GridBorderAlpha = (byte)i;
-                        GridContainer.GridItem.StaticGridContainerSettingUpdated();
+                        GridItem.StaticGridContainerSettingUpdated();
                     }), true, page
             );
 
@@ -3300,7 +3249,7 @@ namespace ClassicUO.Game.UI.Gumps
                 (h) =>
                 {
                     profile.GridBorderHue = h;
-                    GridContainer.GridItem.StaticGridContainerSettingUpdated();
+                    GridItem.StaticGridContainerSettingUpdated();
                 }), true, page);
             content.RemoveIndent();
 
@@ -3353,6 +3302,22 @@ namespace ClassicUO.Game.UI.Gumps
             (
                 new ComboBoxWithLabel
                 (World,
+                    TazLang.Get("gridcontainer_defaultview", "Default container view"), 0, ThemeSettings.COMBO_BOX_WIDTH,
+                    new string[] { TazLang.Get("gridcontainer_view_grid_short", "Grid"), TazLang.Get("gridcontainer_view_list_short", "List") }, profile.GridContainerViewMode,
+                    (i, s) =>
+                    {
+                        profile.GridContainerViewMode = i;
+                        GridContainer.UpdateAllGridContainers();
+                    }
+                ), true, page
+            );
+
+            content.BlankLine();
+
+            content.AddToRight
+            (
+                new ComboBoxWithLabel
+                (World,
                     lang.GetTazUO.SearchStyle, 0, ThemeSettings.COMBO_BOX_WIDTH,
                     new string[] { lang.GetTazUO.OnlyShow, lang.GetTazUO.Highlight }, profile.GridContainerSearchMode,
                     (i, s) => { profile.GridContainerSearchMode = i; }
@@ -3390,7 +3355,7 @@ namespace ClassicUO.Game.UI.Gumps
                 new ComboBoxWithLabel
                 (World,
                     lang.GetTazUO.ContainerStyle, 0, ThemeSettings.COMBO_BOX_WIDTH,
-                    Enum.GetNames(typeof(GridContainer.BorderStyle)), profile.Grid_BorderStyle, (i, s) =>
+                    Enum.GetNames(typeof(BorderStyle)), profile.Grid_BorderStyle, (i, s) =>
                     {
                         profile.Grid_BorderStyle = i;
                         GridContainer.UpdateAllGridContainers();
@@ -4067,7 +4032,7 @@ namespace ClassicUO.Game.UI.Gumps
             content.BlankLine();
 
             content.AddToRight
-            (new CheckboxWithLabel(lang.GetTazUO.EnableHealthIndicatorBorder, 0, profile.EnableHealthIndicator, (b) => { profile.EnableHealthIndicator = b; }),
+            (new CheckboxWithLabel(lang.GetTazUO.HealthBarIndicator, 0, profile.EnableHealthIndicator, (b) => { profile.EnableHealthIndicator = b; }),
                 true, page);
 
             content.Indent();
@@ -4367,7 +4332,7 @@ namespace ClassicUO.Game.UI.Gumps
                     "Disable overhead messages of these types:",
                     ThemeSettings.FONT,
                     ThemeSettings.STANDARD_TEXT_SIZE,
-                    ThemeSettings.TEXT_FONT_COLOR, 
+                    ThemeSettings.TEXT_FONT_COLOR,
                     TextBox.RTLOptions.Default()),
                 true, page);
 
@@ -4471,7 +4436,7 @@ namespace ClassicUO.Game.UI.Gumps
             page = ((int)PAGE.TUOOptions + 1007);
 
             // Enumerate once to save a bit of compute
-            (string[] availableFonts, int maxFontNameLength) = GetOrderedFontNames();
+            (string[] availableFonts, int maxFontNameLength) = TrueTypeLoader.Instance.GetSortedFontNames(true);
 
             content.AddToLeft(SubCategoryButton(lang.GetTazUO.FontSettings, page, content.LeftWidth));
             content.ResetRightSide();
@@ -4494,7 +4459,7 @@ namespace ClassicUO.Game.UI.Gumps
                 (
                     availableFonts,
                     maxFontNameLength,
-                    lang.GetTazUO.InfobarFont,
+                    lang.GetTazUO.InfoBarFont,
                     CurrentProfile.InfoBarFont,
                     (i, s) =>
                     {
@@ -4651,7 +4616,7 @@ namespace ClassicUO.Game.UI.Gumps
                 GenerateFontSelector(
                     availableFonts,
                     maxFontNameLength,
-                    lang.GetTazUO.Optionsfont,
+                    lang.GetTazUO.OptionsFont,
                     CurrentProfile.OptionsFont,
                     (i, s) => { CurrentProfile.OptionsFont = s; }
                 ),
@@ -4888,6 +4853,62 @@ namespace ClassicUO.Game.UI.Gumps
                 ), true, page
             );
 
+            content.AddToRight
+            (
+                new SliderWithLabel
+                (
+                    TazLang.Get("gumpscaling_statusgump", "Status Gump"), 0, ThemeSettings.SLIDER_WIDTH, 50, 300,
+                    (int)(profile.StatusGumpScale * 100), (i) =>
+                    {
+                        //Must be cast even though VS thinks it's redundant.
+                        double v = (double)i / (double)100;
+                        profile.StatusGumpScale = v > 0 ? v : 1f;
+                    }
+                ), true, page
+            );
+
+            content.AddToRight
+            (
+                new SliderWithLabel
+                (
+                    TazLang.Get("gumpscaling_contextmenu", "Context Menus"), 0, ThemeSettings.SLIDER_WIDTH, 50, 300,
+                    (int)(profile.ContextMenuScale * 100), (i) =>
+                    {
+                        //Must be cast even though VS thinks it's redundant.
+                        double v = (double)i / (double)100;
+                        profile.ContextMenuScale = v > 0 ? v : 1f;
+                    }
+                ), true, page
+            );
+
+            content.AddToRight
+            (
+                new SliderWithLabel
+                (
+                    TazLang.Get("gumpscaling_tradegump", "Trade Gump"), 0, ThemeSettings.SLIDER_WIDTH, 50, 300,
+                    (int)(profile.TradeGumpScale * 100), (i) =>
+                    {
+                        //Must be cast even though VS thinks it's redundant.
+                        double v = (double)i / (double)100;
+                        profile.TradeGumpScale = v > 0 ? v : 1f;
+                    }
+                ), true, page
+            );
+
+            content.AddToRight
+            (
+                new SliderWithLabel
+                (
+                    TazLang.Get("gumpscaling_servergump", "Server Gumps"), 0, ThemeSettings.SLIDER_WIDTH, 50, 300,
+                    (int)(profile.ServerGumpScale * 100), (i) =>
+                    {
+                        //Must be cast even though VS thinks it's redundant.
+                        double v = (double)i / (double)100;
+                        profile.ServerGumpScale = v > 0 ? v : 1f;
+                    }
+                ), true, page
+            );
+
             SliderWithLabel s;
             content.AddToRight(
                 s = new SliderWithLabel(lang.GetTazUO.GlobalScale, 0, ThemeSettings.SLIDER_WIDTH, 50, 175,
@@ -5093,35 +5114,6 @@ namespace ClassicUO.Game.UI.Gumps
 
 
             _options.Add(new SettingsOption("", content, MainContent.RightWidth, (int)PAGE.TUOOptions));
-        }
-
-        /// <summary>
-        ///     Retrieves an ordered collection of font names along with the maximum length of all font names.
-        ///     The font names are sorted to prioritize embedded fonts, followed by alphabetical order.
-        /// </summary>
-        /// <returns>
-        ///     A tuple containing:
-        ///     <ul>
-        ///         <li> An array of ordered font names.</li>
-        ///         <li>The maximum length of any font name in the collection.</li>
-        ///     </ul>
-        /// </returns>
-        private static (string[] Names, int MaxNameLength) GetOrderedFontNames()
-        {
-            int maxLength = 0;
-
-            string[] availableFonts = TrueTypeLoader.Instance.Fonts
-                .Select(font =>
-                {
-                    // Keep track of the max name length
-                    maxLength = Math.Max(maxLength, font.Length);
-                    return font;
-                })
-                .OrderBy(font => EmbeddedFontNames.Names.Contains(font) ? 0 : 1) // Embedded fonts should be first in line, ordered by name
-                .ThenBy(font => font) // Then, dynamically loaded fonts, ordered by name as well
-                .ToArray();
-
-            return (availableFonts, maxLength);
         }
 
         public override void Dispose()
@@ -6281,9 +6273,9 @@ namespace ClassicUO.Game.UI.Gumps
                     checkboxName, 0, true, (b) =>
                     {
                         if (b)
-                            Option.NameOverheadOptionFlags |= (int)optionFlag;
+                            Option.NameOverheadOptionFlags |= optionFlag;
                         else
-                            Option.NameOverheadOptionFlags &= ~(int)optionFlag;
+                            Option.NameOverheadOptionFlags &= ~optionFlag;
 
                         if (NameOverHeadManager.LastActiveNameOverheadOption.Replace("\\u0026", "&") == Option.Name)
                             NameOverHeadManager.ActiveOverheadOptions =
@@ -6370,7 +6362,7 @@ namespace ClassicUO.Game.UI.Gumps
                 switch ((ButtonType)buttonID)
                 {
                     case ButtonType.CheckAll:
-                        Option.NameOverheadOptionFlags = int.MaxValue;
+                        Option.NameOverheadOptionFlags = ByteFlagHelper.AllBits<NameOverheadOptions>();
                         UpdateCheckboxesByCurrentOptionFlags();
 
                         break;

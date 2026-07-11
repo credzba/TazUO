@@ -17,6 +17,18 @@ using ClassicUO.Assets;
 
 namespace ClassicUO.Game.UI.Gumps
 {
+    /// <summary>
+    /// Controls when a health bar gump automatically closes.
+    /// Stored on the profile as an int (see Profile.CloseHealthBarType).
+    /// </summary>
+    public enum CloseHealthBarType
+    {
+        None = 0,        // Never auto-close
+        OutOfRange = 1,  // Close when the mobile no longer exists / is out of range
+        Dead = 2,        // Close when the mobile is dead (a corpse exists)
+        Both = 3         // Close when out of range or dead
+    }
+
     public abstract class BaseHealthBarGump : AnchorableGump
     {
         private bool _targetBroke;
@@ -24,6 +36,9 @@ namespace ClassicUO.Game.UI.Gumps
         public bool IsLastAttackBar { get; set; }
         public static BaseHealthBarGump LastAttackBar { get; set; }
         protected bool HasBeenBuilt { get; set; }
+
+        /// <summary>Tracks whether the gump was last built with the compact party style, so a live toggle of <see cref="Profile.UsePartyHealthBars"/> can trigger a rebuild.</summary>
+        protected bool BuiltAsPartyBar { get; set; }
         protected World _world;
 
         protected BaseHealthBarGump(World world, Entity entity) : this(world, 0, 0)
@@ -276,18 +291,8 @@ namespace ClassicUO.Game.UI.Gumps
 
                 if (!ProfileManager.CurrentProfile.DisableAutoFollowAlt)
                 {
-                    _world.MessageManager.HandleMessage
-                    (
-                        World.Player,
-                        ResGeneral.NowFollowing,
-                        string.Empty,
-                        0,
-                        MessageType.Regular,
-                        3,
-                        TextType.CLIENT
-                    );
-                    ProfileManager.CurrentProfile.FollowingMode = true;
-                    ProfileManager.CurrentProfile.FollowingTarget = LocalSerial;
+                    if (_world.Mobiles.Get(LocalSerial) is Mobile mobile)
+                        mobile.Follow();
                 }
             }
         }
@@ -467,6 +472,15 @@ namespace ClassicUO.Game.UI.Gumps
             && mobile.IsRenamable
             && entity != World.Player
             && !World.Party.Contains(LocalSerial);
+
+        /// <summary>
+        /// Whether this bar should be drawn using the special compact party style.
+        /// Returns true only when the entity is in the party and the user has not
+        /// disabled the party health bar style via <see cref="Profile.UsePartyHealthBars"/>.
+        /// </summary>
+        protected bool ShowPartyStyleBar =>
+            World.Party.Contains(LocalSerial)
+            && (ProfileManager.CurrentProfile?.UsePartyHealthBars ?? true);
     }
 
     public class HealthBarGumpCustom : BaseHealthBarGump
@@ -522,6 +536,10 @@ namespace ClassicUO.Game.UI.Gumps
             Clear();
             Children.Clear();
 
+            _normalHits = false;
+            _poisoned = false;
+            _yellowHits = false;
+
             _background = null;
             _hpLineRed = _manaLineRed = _stamLineRed = null;
             _buttonHeal1 = _buttonHeal2 = null;
@@ -546,7 +564,14 @@ namespace ClassicUO.Game.UI.Gumps
                 return;
             }
 
-            bool inparty = World.Party.Contains(LocalSerial);
+            if (BuiltAsPartyBar != ShowPartyStyleBar)
+            {
+                RequestUpdateContents();
+
+                return;
+            }
+
+            bool inparty = ShowPartyStyleBar;
 
 
             ushort textColor = 0x0386;
@@ -561,7 +586,15 @@ namespace ClassicUO.Game.UI.Gumps
             if (entity == null || entity.IsDestroyed)
             {
                 bool hasCorpse = World.CorpseManager.Exists(0, LocalSerial | 0x8000_0000);
-                if (LocalSerial != World.Player && (ProfileManager.CurrentProfile.CloseHealthBarType == 1 || ProfileManager.CurrentProfile.CloseHealthBarType == 3) || ((ProfileManager.CurrentProfile.CloseHealthBarType == 2 || ProfileManager.CurrentProfile.CloseHealthBarType == 3) && hasCorpse))
+
+                var closeType = (CloseHealthBarType)ProfileManager.CurrentProfile.CloseHealthBarType;
+                bool closeWhenOutOfRange = closeType == CloseHealthBarType.OutOfRange || closeType == CloseHealthBarType.Both;
+                bool closeWhenDead = closeType == CloseHealthBarType.Dead || closeType == CloseHealthBarType.Both;
+
+                bool shouldCloseForOutOfRange = LocalSerial != World.Player && closeWhenOutOfRange;
+                bool shouldCloseForDeath = closeWhenDead && hasCorpse;
+
+                if (shouldCloseForOutOfRange || shouldCloseForDeath)
                 {
                     //### KEEPS PARTY BAR ACTIVE WHEN PARTY MEMBER DIES & MOBILEBAR CLOSE SELECTED ###//
                     if (!inparty && CheckIfAnchoredElseDispose())
@@ -655,7 +688,10 @@ namespace ClassicUO.Game.UI.Gumps
 
                 var mobile = entity as Mobile;
 
-                if (!_isDead && entity != World.Player && mobile != null && mobile.IsDead && (ProfileManager.CurrentProfile.CloseHealthBarType == 2 || ProfileManager.CurrentProfile.CloseHealthBarType == 3)) // is dead
+                var closeType = (CloseHealthBarType)ProfileManager.CurrentProfile.CloseHealthBarType;
+                bool closeWhenDead = closeType == CloseHealthBarType.Dead || closeType == CloseHealthBarType.Both;
+
+                if (!_isDead && entity != World.Player && mobile != null && mobile.IsDead && closeWhenDead) // is dead
                 {
                     if (!inparty && CheckIfAnchoredElseDispose())
                     {
@@ -914,8 +950,9 @@ namespace ClassicUO.Game.UI.Gumps
 
             Entity entity = World.Get(LocalSerial);
 
+            BuiltAsPartyBar = ShowPartyStyleBar;
 
-            if (World.Party.Contains(LocalSerial))
+            if (ShowPartyStyleBar)
             {
                 Height = HPB_HEIGHT_MULTILINE;
                 Width = HPB_WIDTH;
@@ -1599,6 +1636,11 @@ namespace ClassicUO.Game.UI.Gumps
             Clear();
             Children.Clear();
 
+            _oldHits = _oldMana = _oldStam = -1;
+            _normalHits = false;
+            _poisoned = false;
+            _yellowHits = false;
+
             _background = _hpLineRed = _manaLineRed = _stamLineRed = null;
             _buttonHeal1 = _buttonHeal2 = null;
 
@@ -1619,7 +1661,9 @@ namespace ClassicUO.Game.UI.Gumps
 
             Entity entity = World.Get(LocalSerial);
 
-            if (World.Party.Contains(LocalSerial))
+            BuiltAsPartyBar = ShowPartyStyleBar;
+
+            if (ShowPartyStyleBar)
             {
                 Add
                 (
@@ -1886,7 +1930,14 @@ namespace ClassicUO.Game.UI.Gumps
                 return;
             }
 
-            bool inparty = World.Party.Contains(LocalSerial);
+            if (BuiltAsPartyBar != ShowPartyStyleBar)
+            {
+                RequestUpdateContents();
+
+                return;
+            }
+
+            bool inparty = ShowPartyStyleBar;
 
 
             ushort textColor = Settings.Hue_Text;
@@ -1904,7 +1955,15 @@ namespace ClassicUO.Game.UI.Gumps
             if (entity == null || entity.IsDestroyed)
             {
                 bool hasCorpse = World.CorpseManager.Exists(0, LocalSerial | 0x8000_0000);
-                if (LocalSerial != World.Player && (ProfileManager.CurrentProfile.CloseHealthBarType == 1 || ProfileManager.CurrentProfile.CloseHealthBarType == 3) || ((ProfileManager.CurrentProfile.CloseHealthBarType == 2 || ProfileManager.CurrentProfile.CloseHealthBarType == 3) && hasCorpse))
+
+                var closeType = (CloseHealthBarType)ProfileManager.CurrentProfile.CloseHealthBarType;
+                bool closeWhenOutOfRange = closeType == CloseHealthBarType.OutOfRange || closeType == CloseHealthBarType.Both;
+                bool closeWhenDead = closeType == CloseHealthBarType.Dead || closeType == CloseHealthBarType.Both;
+
+                bool shouldCloseForOutOfRange = LocalSerial != World.Player && closeWhenOutOfRange;
+                bool shouldCloseForDeath = closeWhenDead && hasCorpse;
+
+                if (shouldCloseForOutOfRange || shouldCloseForDeath)
                 {
                     if (CheckIfAnchoredElseDispose())
                     {
@@ -1980,7 +2039,10 @@ namespace ClassicUO.Game.UI.Gumps
 
                 var mobile = entity as Mobile;
 
-                if (!_isDead && entity != World.Player && mobile != null && mobile.IsDead && !inparty && (ProfileManager.CurrentProfile.CloseHealthBarType == 2 || ProfileManager.CurrentProfile.CloseHealthBarType == 3)) // is dead
+                var closeType = (CloseHealthBarType)ProfileManager.CurrentProfile.CloseHealthBarType;
+                bool closeWhenDead = closeType == CloseHealthBarType.Dead || closeType == CloseHealthBarType.Both;
+
+                if (!_isDead && entity != World.Player && mobile != null && mobile.IsDead && !inparty && closeWhenDead) // is dead
                 {
                     if (CheckIfAnchoredElseDispose())
                     {

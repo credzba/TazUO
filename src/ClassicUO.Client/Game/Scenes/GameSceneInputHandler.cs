@@ -898,20 +898,9 @@ namespace ClassicUO.Game.Scenes
 
                     case Entity ent:
 
-                        if (HotKeys.IsPressed(HotKeyRegistrar.FollowMobileId) && !ProfileManager.CurrentProfile.DisableAutoFollowAlt && ent is Mobile)
+                        if (HotKeys.IsPressed(HotKeyRegistrar.FollowMobileId) && !ProfileManager.CurrentProfile.DisableAutoFollowAlt && ent is Mobile followMobile)
                         {
-                            _world.MessageManager.HandleMessage(
-                                _world.Player,
-                                ResGeneral.NowFollowing,
-                                string.Empty,
-                                0,
-                                MessageType.Regular,
-                                3,
-                                TextType.CLIENT
-                            );
-
-                            ProfileManager.CurrentProfile.FollowingMode = true;
-                            ProfileManager.CurrentProfile.FollowingTarget = ent;
+                            followMobile.Follow();
                         }
                         else if (!_world.DelayedObjectClickManager.IsEnabled)
                         {
@@ -1091,6 +1080,10 @@ namespace ClassicUO.Game.Scenes
             {
                 return false;
             }
+
+            _rightMousePressed = true;
+            _continueRunning = false;
+            StopFollowing();
 
             if (ProfileManager.CurrentProfile.EnablePathfind && !_world.Player.Pathfinder.AutoWalking)
             {

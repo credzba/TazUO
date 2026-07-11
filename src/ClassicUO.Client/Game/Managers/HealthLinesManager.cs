@@ -45,7 +45,6 @@ namespace ClassicUO.Game.Managers
             }
 
             int showWhen = ProfileManager.CurrentProfile.MobileHPShowWhen;
-            bool useNewTargetSystem = ProfileManager.CurrentProfile.UseNewTargetSystem;
             Renderer.Animations.Animations animations = Client.Game.UO.Animations;
             bool isEnabled = IsEnabled;
 
@@ -65,7 +64,7 @@ namespace ClassicUO.Game.Managers
                     _world.TargetManager.SelectedTarget == mobile ||
                     _world.TargetManager.NewTargetSystemSerial == mobile)
                 {
-                    newTargSystem = (useNewTargetSystem || showTargetIndicator) && _world.TargetManager.NewTargetSystemSerial == mobile;
+                    newTargSystem = showTargetIndicator && _world.TargetManager.NewTargetSystemSerial == mobile;
                     passive = false;
                     forceDraw = true;
                 }
@@ -132,7 +131,13 @@ namespace ClassicUO.Game.Managers
                                     p1.Y += 22;
                                 }
 
-                                p1 = Client.Game.Scene.Camera.WorldToScreen(p1);
+                                // NOTE: Do NOT call Camera.WorldToScreen here. This overhead pass is
+                                // already drawn through a batcher begun with Camera.ViewTransformMatrix
+                                // (see GameScene.DrawOverheads), so the camera transform is applied
+                                // automatically. The health bar below uses world coordinates directly for
+                                // the same reason. Applying WorldToScreen manually transforms the position a
+                                // second time, which made the percent text drift in a radius around the
+                                // mobile as the zoom level changed instead of staying centered on top.
                                 p1.X -= (mobile.HitsTexture.Width >> 1) + 5;
                                 p1.Y -= mobile.HitsTexture.Height;
 
