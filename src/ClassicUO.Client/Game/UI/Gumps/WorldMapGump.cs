@@ -1770,7 +1770,7 @@ public class WorldMapGump : ResizableGump
 
                     foreach (string icon in mapIconPaths)
                     {
-                        var fs = new FileStream(icon, FileMode.Open, FileAccess.Read);
+                        var fs = new FileStream(icon, FileMode.Open, FileAccess.Read, FileShare.Read);
                         var ms = new MemoryStream();
                         fs.CopyTo(ms);
                         ms.Seek(0, SeekOrigin.Begin);
@@ -1796,7 +1796,7 @@ public class WorldMapGump : ResizableGump
 
                     foreach (string icon in mapIconPathsPngJpg)
                     {
-                        var fs = new FileStream(icon, FileMode.Open, FileAccess.Read);
+                        var fs = new FileStream(icon, FileMode.Open, FileAccess.Read, FileShare.Read);
                         var ms = new MemoryStream();
                         fs.CopyTo(ms);
                         ms.Seek(0, SeekOrigin.Begin);
