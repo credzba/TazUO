@@ -25,7 +25,7 @@ namespace ClassicUO.Renderer.MultiMaps
                 _multiMapLoader.LoadFacet(facet.Value, width, height, startX, startY, endX, endY) :
                 _multiMapLoader.LoadMap(width, height, startX, startY, endX, endY);
 
-            if (multiMapInfo.Pixels.IsEmpty)
+            if (multiMapInfo.Pixels.IsEmpty || multiMapInfo.Width <= 0 || multiMapInfo.Height <= 0 || multiMapInfo.Width > 8192 || multiMapInfo.Height > 8192)
                 return default;
 
             var texture = new Texture2D(_device, multiMapInfo.Width, multiMapInfo.Height, false, SurfaceFormat.Color);
