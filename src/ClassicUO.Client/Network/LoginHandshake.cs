@@ -34,6 +34,7 @@ namespace ClassicUO.Network
         // connect but never receive a reply, leaving us pinned in VerifyingAccount with no way
         // out. This watchdog forces a fallback so the reconnect loop can retry.
         private const int HANDSHAKE_TIMEOUT_MS = 8000;
+        private const int MAX_RECONNECT_BACKOFF_MS = 300_000;
 
         private ushort _retries;
         private int _reconnectTryCounter = 1;
@@ -89,6 +90,7 @@ namespace ClassicUO.Network
             if (!Reconnect)
             {
                 SetLoginStep(LoginSteps.Connecting);
+                _reconnectTryCounter = 1;
             }
 
             AsyncNetClient.Socket.Connected -= OnNetClientConnected;
@@ -170,7 +172,10 @@ namespace ClassicUO.Network
                     reconnectTime = 1000;
                 }
 
-                _reconnectTime = (long)Time.Ticks + reconnectTime;
+                double backoff = reconnectTime * Math.Pow(2, _reconnectTryCounter - 1);
+                long delay = Math.Min((long)backoff, MAX_RECONNECT_BACKOFF_MS);
+
+                _reconnectTime = (long)Time.Ticks + delay;
                 _reconnectTryCounter++;
             }
         }
@@ -187,6 +192,8 @@ namespace ClassicUO.Network
             {
                 Servers[i] = ServerListEntry.Create(ref p);
             }
+
+            _reconnectTryCounter = 1;
 
             SetLoginStep(LoginSteps.ServerSelection);
 
@@ -209,6 +216,8 @@ namespace ClassicUO.Network
             ParseCharacterList(ref p);
             ParseCities(ref p);
             CharacterListFlags = p.ReadUInt32BE();
+
+            _reconnectTryCounter = 1;
 
             SetLoginStep(LoginSteps.CharacterSelection);
             ReceiveCharacterListNotifier?.Invoke();
