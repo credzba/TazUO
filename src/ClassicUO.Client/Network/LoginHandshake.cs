@@ -80,6 +80,8 @@ namespace ClassicUO.Network
                 return;
             }
 
+            ClassicUO.Network.PacketHandlers.PacketParser.Instance.ClearBuffers();
+
             Account = account;
             Password = password;
             IP = ip;
@@ -89,9 +91,10 @@ namespace ClassicUO.Network
 
             if (!Reconnect)
             {
-                SetLoginStep(LoginSteps.Connecting);
                 _reconnectTryCounter = 1;
             }
+
+            SetLoginStep(LoginSteps.Connecting);
 
             AsyncNetClient.Socket.Connected -= OnNetClientConnected;
             AsyncNetClient.Socket.Disconnected -= OnNetClientDisconnected;
@@ -448,6 +451,8 @@ namespace ClassicUO.Network
             AsyncNetClient.Socket.Disconnected -= OnNetClientDisconnected;
             AsyncNetClient.Socket.Disconnect().Wait();
             AsyncNetClient.Socket = new AsyncNetClient();
+
+            ClassicUO.Network.PacketHandlers.PacketParser.Instance.ClearBuffers();
 
             _retries++;
             Log.TraceDebug($"[HandShake] Reconnecting to relay server...");
