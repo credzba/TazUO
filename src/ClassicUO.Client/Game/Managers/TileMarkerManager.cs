@@ -51,33 +51,16 @@ namespace ClassicUO.Game.Managers
         }
 
         private Dictionary<TileLocation, ushort> markedTiles = new Dictionary<TileLocation, ushort>();
-        private bool _loaded;
 
         private TileMarkerManager()
         {
             if (!string.IsNullOrEmpty(ProfileManager.CurrentProfile?.ServerName))
             {
-                _loaded = true;
                 Load();
-            }
-            else
-            {
-                ProfileManager.CurrentProfileChanged += OnProfileChanged;
             }
         }
 
-        private void OnProfileChanged(object sender, EventArgs e)
-        {
-            if (!_loaded && !string.IsNullOrEmpty(ProfileManager.CurrentProfile?.ServerName))
-            {
-                _loaded = true;
-                Load();
-            }
-
-            ProfileManager.CurrentProfileChanged -= OnProfileChanged;
-        }
-
-        private string SavePath => Path.Combine(JsonSaveLocationHelper.GetScopeDirectory(SettingsScope.Server), "TileMarkers.json");
+        private string SavePath => Path.Combine(Path.GetDirectoryName(ProfileManager.ProfilePath), "TileMarkers.json");
 
         public void AddTile(int x, int y, int map, ushort hue)
         {
