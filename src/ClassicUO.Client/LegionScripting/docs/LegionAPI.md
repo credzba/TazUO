@@ -13,15 +13,8 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
  `API.Msg("An example")`.
 :::
 
-:::tip[API.py File]
-If you download the [API.py](https://github.com/PlayTazUO/TazUO/blob/dev/src/ClassicUO.Client/LegionScripting/docs/API.py) file, put it in the same folder as your python scripts and add `import API` to your script, that will enable some mild form of autocomplete in an editor like VS Code.  
 
-You can now type `-updateapi` in game to download the latest API.py file.
-:::
-
-[Additional notes](../notes/)  
-
-*This was generated on `8/4/26`.*
+*This was generated on `8/6/26`.*
 
 ## Properties
 ### `Events`
@@ -3699,8 +3692,8 @@ You can now type `-updateapi` in game to download the latest API.py file.
 ---
 
 ### MarkTile
-`(x, y, hue, map)`
- Mark a tile with a specific hue.
+`(x, y, hue, map, label)`
+ Mark a tile with a specific hue and optional text label.
 
 
 **Parameters:**
@@ -3711,6 +3704,7 @@ You can now type `-updateapi` in game to download the latest API.py file.
 | `y` | `int` | ❌ No |  |
 | `hue` | `ushort` | ❌ No |  |
 | `map` | `int` | ✅ Yes | Defaults to current map |
+| `label` | `string` | ✅ Yes | Optional text label displayed on the tile |
 
 **Return Type:** `void` *(Does not return anything)*
 

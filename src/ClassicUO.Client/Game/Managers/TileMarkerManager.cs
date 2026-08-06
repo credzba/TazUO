@@ -32,6 +32,13 @@ namespace ClassicUO.Game.Managers
     {
         public TileLocation Location { get; set; }
         public ushort Hue { get; set; }
+        public string Label { get; set; }
+    }
+
+    internal struct TileMarkerData
+    {
+        public ushort Hue;
+        public string Label;
     }
 
     /// <summary>Legacy source-gen context used only to read the old profile-scoped TileMarkers.json.</summary>
@@ -68,7 +75,7 @@ namespace ClassicUO.Game.Managers
     {
         public static TileMarkerManager Instance { get; private set; } = new TileMarkerManager();
 
-        private Dictionary<TileLocation, ushort> markedTiles = new Dictionary<TileLocation, ushort>();
+        private Dictionary<TileLocation, TileMarkerData> markedTiles = new Dictionary<TileLocation, TileMarkerData>();
         private TileMarkerConfig config;
 
         private TileMarkerManager() { Load(); }
@@ -78,10 +85,14 @@ namespace ClassicUO.Game.Managers
 
         public void AddTile(int x, int y, int map, ushort hue)
         {
-            var location = new TileLocation(x, y, map);
-            markedTiles[location] = hue;
+            AddTile(x, y, map, hue, null);
+        }
 
-            // Update all live tiles at this location
+        public void AddTile(int x, int y, int map, ushort hue, string label)
+        {
+            var location = new TileLocation(x, y, map);
+            markedTiles[location] = new TileMarkerData { Hue = hue, Label = label };
+
             UpdateLiveTilesAt(x, y, map, hue);
         }
 
@@ -91,17 +102,33 @@ namespace ClassicUO.Game.Managers
 
             if (markedTiles.Remove(location))
             {
-                // Reset hue to 0 for all live tiles at this location
                 UpdateLiveTilesAt(x, y, map, 0);
             }
         }
 
-        public bool IsTileMarked(int x, int y, int map, out ushort hue) => markedTiles.TryGetValue(new TileLocation(x, y, map), out hue);
+        public bool IsTileMarked(int x, int y, int map, out ushort hue)
+        {
+            if (markedTiles.TryGetValue(new TileLocation(x, y, map), out TileMarkerData data))
+            {
+                hue = data.Hue;
+                return true;
+            }
+            hue = 0;
+            return false;
+        }
 
+        public IEnumerable<KeyValuePair<TileLocation, TileMarkerData>> GetMarkedTilesForMap(int mapIndex)
+        {
+            foreach (var kvp in markedTiles)
+            {
+                if (kvp.Key.Map == mapIndex)
+                    yield return kvp;
+            }
+        }
 
         public void Save()
         {
-            config.Markers = markedTiles.Select(kvp => new TileMarkerEntry { Location = kvp.Key, Hue = kvp.Value }).ToList();
+            config.Markers = markedTiles.Select(kvp => new TileMarkerEntry { Location = kvp.Key, Hue = kvp.Value.Hue, Label = kvp.Value.Label }).ToList();
             config.Save();
         }
 
@@ -110,7 +137,7 @@ namespace ClassicUO.Game.Managers
             MigrateLegacyFile();
 
             config = TileMarkerConfig.Load();
-            markedTiles = config.Markers.ToDictionary(e => e.Location, e => e.Hue);
+            markedTiles = config.Markers.ToDictionary(e => e.Location, e => new TileMarkerData { Hue = e.Hue, Label = e.Label });
         }
 
         /// <summary>Moves the old profile-scoped TileMarkers.json into the server-scoped location, once.</summary>

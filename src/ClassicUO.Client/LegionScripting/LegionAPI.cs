@@ -4446,18 +4446,19 @@ namespace ClassicUO.LegionScripting
         }
 
         /// <summary>
-        /// Mark a tile with a specific hue.
+        /// Mark a tile with a specific hue and optional text label.
         /// </summary>
         /// <param name="x"></param>
         /// <param name="y"></param>
         /// <param name="hue"></param>
         /// <param name="map">Defaults to current map</param>
-        public void MarkTile(int x, int y, ushort hue, int map = -1) => OnMain(() =>
+        /// <param name="label">Optional text label displayed on the tile</param>
+        public void MarkTile(int x, int y, ushort hue, int map = -1, string label = null) => OnMain(() =>
         {
             if (map < 0)
                 map = World.Map.Index;
 
-            TileMarkerManager.Instance.AddTile(x, y, map, hue);
+            TileMarkerManager.Instance.AddTile(x, y, map, hue, label);
         });
 
         /// <summary>

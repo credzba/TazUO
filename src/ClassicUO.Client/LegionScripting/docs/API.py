@@ -3330,9 +3330,9 @@ def GetPersistentVar(name: "str", defaultValue: "str", scope: "PersistentVar") -
     """
     pass
 
-def MarkTile(x: "int", y: "int", hue: "int", map: "int" = -1) -> None:
+def MarkTile(x: "int", y: "int", hue: "int", map: "int" = -1, label: "str" = None) -> None:
     """
-     Mark a tile with a specific hue.
+     Mark a tile with a specific hue and optional text label.
     
     """
     pass

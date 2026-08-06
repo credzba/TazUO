@@ -8,6 +8,7 @@ using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.Managers.Hotkeys;
 using ClassicUO.Game.UI;
+using ClassicUO.Game.UI.Controls;
 using ClassicUO.Game.UI.Gumps;
 using ClassicUO.Input;
 using ClassicUO.Network;
@@ -66,6 +67,9 @@ namespace ClassicUO.Game.Scenes
         private long _alphaTimer;
         private bool _forceStopScene;
         private HealthLinesManager _healthLinesManager;
+
+        private readonly Dictionary<TileLocation, TextObject> _markedTileLabels = new();
+        private readonly Dictionary<TileLocation, string> _markedTileLabelTexts = new();
 
         private Point3D _lastSelectedMultiPositionInHouseCustomization;
         private int _lightCount;
@@ -1514,6 +1518,90 @@ namespace ClassicUO.Game.Scenes
             return true;
         }
 
+        private void UpdateMarkedTileLabels()
+        {
+            if (_world?.Map == null)
+            {
+                _markedTileLabels.Clear();
+                _markedTileLabelTexts.Clear();
+                return;
+            }
+
+            int mapIndex = _world.Map.Index;
+            int offsetX = _offset.X;
+            int offsetY = _offset.Y;
+            long nextTick = Time.Ticks + 1000;
+
+            var currentLocations = new HashSet<TileLocation>();
+
+            foreach (var kvp in TileMarkerManager.Instance.GetMarkedTilesForMap(mapIndex))
+            {
+                TileLocation loc = kvp.Key;
+                ushort hue = kvp.Value.Hue;
+                string label = string.IsNullOrEmpty(kvp.Value.Label) ? null : kvp.Value.Label;
+                string displayText = label ?? $"{hue:X4}";
+
+                if (loc.X < _minTile.X || loc.X > _maxTile.X || loc.Y < _minTile.Y || loc.Y > _maxTile.Y)
+                    continue;
+
+                currentLocations.Add(loc);
+
+                int screenX = ((loc.X - loc.Y) * 22) - offsetX - 22;
+                int screenY = ((loc.X + loc.Y) * 22) - offsetY - 22;
+
+                if (_markedTileLabels.TryGetValue(loc, out TextObject textObj))
+                {
+                    if (textObj.IsDestroyed || textObj.Hue != hue || _markedTileLabelTexts[loc] != displayText)
+                    {
+                        textObj.Destroy();
+                        _markedTileLabels.Remove(loc);
+                        _markedTileLabelTexts.Remove(loc);
+                        textObj = null;
+                    }
+                }
+
+                if (textObj == null)
+                {
+                    Color tileColor = TextBox.ConvertHueToColor(hue);
+                    double luminance = (0.2126d * tileColor.R + 0.7152d * tileColor.G + 0.0722d * tileColor.B) / 255d;
+                    Color textColor = luminance > 0.72d ? Color.Black : Color.White;
+
+                    textObj = TextObject.Create(_world);
+                    textObj.Hue = hue;
+                    textObj.TextBox = TextBox.GetOne(
+                        displayText,
+                        ProfileManager.CurrentProfile.OverheadChatFont,
+                        Math.Max(8, ProfileManager.CurrentProfile.OverheadChatFontSize * 0.55f),
+                        textColor,
+                        TextBox.RTLOptions.DefaultCentered()
+                    );
+                    _world.WorldTextManager.AddMessage(textObj);
+                    _markedTileLabels[loc] = textObj;
+                    _markedTileLabelTexts[loc] = displayText;
+                }
+
+                textObj.Time = nextTick;
+                textObj.RealScreenPosition = new Point(
+                    screenX + 22 - (textObj.TextBox.Width >> 1),
+                    screenY + 22 - (textObj.TextBox.Height >> 1)
+                );
+            }
+
+            var toRemove = new List<TileLocation>();
+            foreach (var loc in _markedTileLabels.Keys)
+            {
+                if (!currentLocations.Contains(loc))
+                    toRemove.Add(loc);
+            }
+            foreach (var loc in toRemove)
+            {
+                if (_markedTileLabels.TryGetValue(loc, out var obj))
+                    obj.Destroy();
+                _markedTileLabels.Remove(loc);
+                _markedTileLabelTexts.Remove(loc);
+            }
+        }
+
         public void DrawOverheads(UltimaBatcher2D batcher)
         {
             _healthLinesManager.Draw(batcher);
@@ -1523,6 +1611,7 @@ namespace ClassicUO.Game.Scenes
                 SelectedObject.Object = null;
             }
 
+            UpdateMarkedTileLabels();
             _world.WorldTextManager.ProcessWorldText(true);
             // Always drawing to render target, use 0,0 offset since render target has no offset
             _world.WorldTextManager.Draw(batcher, 0, 0);

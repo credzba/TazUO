@@ -163,6 +163,7 @@ namespace ClassicUO.Game.Managers
                 }
                 else
                 {
+
                     if (s.Length == 1)
                     {
                         TileMarkerManager.Instance.AddTile(_world.Player.X, _world.Player.Y, _world.Map.Index, 32);
@@ -171,6 +172,13 @@ namespace ClassicUO.Game.Managers
                     {
                         if (ushort.TryParse(s[1], out ushort h))
                             TileMarkerManager.Instance.AddTile(_world.Player.X, _world.Player.Y, _world.Map.Index, h);
+                        else
+                            TileMarkerManager.Instance.AddTile(_world.Player.X, _world.Player.Y, _world.Map.Index, 32, s[1]);
+                    }
+                    else if (s.Length == 3)
+                    {
+                        if (ushort.TryParse(s[1], out ushort h))
+                            TileMarkerManager.Instance.AddTile(_world.Player.X, _world.Player.Y, _world.Map.Index, h, s[2]);
                     }
                     else if (s.Length == 4)
                     {
@@ -183,9 +191,16 @@ namespace ClassicUO.Game.Managers
                     {
                         if (int.TryParse(s[1], out int x))
                             if (int.TryParse(s[2], out int y))
+                                if (ushort.TryParse(s[3], out ushort h))
+                                    TileMarkerManager.Instance.AddTile(x, y, _world.Map.Index, h, s[4]);
+                    }
+                    else if (s.Length == 6)
+                    {
+                        if (int.TryParse(s[1], out int x))
+                            if (int.TryParse(s[2], out int y))
                                 if (int.TryParse(s[3], out int m))
                                     if (ushort.TryParse(s[4], out ushort h))
-                                        TileMarkerManager.Instance.AddTile(x, y, m, h);
+                                        TileMarkerManager.Instance.AddTile(x, y, m, h, s[5]);
                     }
                 }
             });
