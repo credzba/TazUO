@@ -514,6 +514,12 @@ namespace ClassicUO.Game.Scenes
                 if (Settings.GlobalSettings.Reconnect)
                 {
                     LoginHandshake.Reconnect = true;
+
+                    // CurrentLoginStep is left at EnteringBritania from when the character was
+                    // selected, but HandleReconnect only retries from PopUpMessage/Main. Reset it
+                    // so the reconnect loop in LoginScene can actually start.
+                    LoginHandshake.Instance.SetLoginStep(LoginSteps.PopUpMessage);
+
                     _forceStopScene = true;
                 }
                 else
