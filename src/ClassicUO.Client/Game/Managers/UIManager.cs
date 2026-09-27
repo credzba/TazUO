@@ -446,6 +446,9 @@ namespace ClassicUO.Game.Managers
             if (gump == null || gump.ServerSerial == 0)
                 return;
 
+            if (gump.IsNotMovable)
+                return;
+
             if (ProfileManager.CurrentProfile?.AutoSaveGumpPositions != true)
                 return;
 

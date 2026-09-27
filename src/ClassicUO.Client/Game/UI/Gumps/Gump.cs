@@ -34,7 +34,14 @@ namespace ClassicUO.Game.UI.Gumps
 
         public virtual bool ShouldBeSaved => true;
 
-        public bool CanBeSaved => ShouldBeSaved && (GumpType != Gumps.GumpType.None || ServerSerial != 0);
+        /// <summary>
+        /// Set when the gump layout contains the <c>{ nomove}</c> command. Such gumps have no
+        /// meaningful user-controlled position (the sender places them), so they must never have
+        /// their position persisted or restored.
+        /// </summary>
+        public bool IsNotMovable { get; set; }
+
+        public bool CanBeSaved => ShouldBeSaved && !IsNotMovable && (GumpType != Gumps.GumpType.None || ServerSerial != 0);
 
         public virtual GumpType GumpType { get; }
 

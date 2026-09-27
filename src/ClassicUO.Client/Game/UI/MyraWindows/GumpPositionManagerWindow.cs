@@ -343,6 +343,10 @@ public sealed class GumpPositionManagerWindow : MyraControl
             if (gump.ServerSerial == 0)
                 continue;
 
+            // Gumps that declare { nomove} are positioned by the sender and must never be persisted.
+            if (gump.IsNotMovable)
+                continue;
+
             rows.Add(new OpenGumpRow(gump, gump.ServerSerial, UIManager.GetGumpDisplayName(gump)));
         }
 

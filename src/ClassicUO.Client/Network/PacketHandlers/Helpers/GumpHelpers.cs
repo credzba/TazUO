@@ -435,7 +435,10 @@ internal static class GumpHelpers
             else if (
                 string.Equals(entry, "nomove", StringComparison.InvariantCultureIgnoreCase)
             )
+            {
                 gump.CanMove = false;
+                gump.IsNotMovable = true;
+            }
             else if (
                 string.Equals(entry, "group", StringComparison.InvariantCultureIgnoreCase)
                 || string.Equals(entry, "endgroup", StringComparison.InvariantCultureIgnoreCase)

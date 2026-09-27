@@ -1,4 +1,5 @@
 using ClassicUO.Configuration;
+using ClassicUO.Input;
 
 namespace ClassicUO.Game.Managers.Hotkeys
 {

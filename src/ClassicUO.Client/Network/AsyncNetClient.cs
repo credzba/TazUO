@@ -36,6 +36,7 @@ namespace ClassicUO.Network
             {
                 _socket = new TcpClient();
                 _socket.NoDelay = true;
+                _socket.ReceiveBufferSize = 256 * 1024;
                 _cancellationTokenSource = new CancellationTokenSource();
 
                 Task connectTask = _socket.ConnectAsync(ip, port);
@@ -101,7 +102,7 @@ namespace ClassicUO.Network
 
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
         {
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
 
             try
             {
@@ -186,7 +187,7 @@ namespace ClassicUO.Network
 
     public sealed class AsyncNetClient : IDisposable
     {
-        private const int BUFF_SIZE = 0x10000;
+        private const int BUFF_SIZE = 0x40000;
 
         private readonly byte[] _compressedBuffer = new byte[4096];
         private readonly byte[] _uncompressedBuffer = new byte[BUFF_SIZE];
