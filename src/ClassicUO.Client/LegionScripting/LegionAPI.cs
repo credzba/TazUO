@@ -91,6 +91,7 @@ namespace ClassicUO.LegionScripting
         private T OnMain<T>(Func<T> func) => MainThreadQueue.InvokeOnMainThread(func, _cachedToken);
         private void OnMain(Action action) => MainThreadQueue.InvokeOnMainThread(action, _cachedToken);
         private T BubblingOnMain<T>(Func<T> func) => MainThreadQueue.BubblingInvokeOnMainThread(func, _cachedToken);
+        private void BubblingOnMain(Action action) => MainThreadQueue.BubblingInvokeOnMainThread(action, _cachedToken);
 
         #endregion
 
@@ -347,7 +348,7 @@ namespace ClassicUO.LegionScripting
             get
             {
                 if (_backpack == null)
-                    _backpack = OnMain(() => World.Player.Backpack);
+                    _backpack = BubblingOnMain(() => World?.Player?.Backpack); // Implicit operator on ApiEntity => uint - also coalesces to 0 if null
 
                 return _backpack;
             }
@@ -361,7 +362,7 @@ namespace ClassicUO.LegionScripting
         {
             get
             {
-                field ??= OnMain(() => new ApiPlayer(World.Player));
+                field ??= OnMain(() => World?.Player is { } p ? new ApiPlayer(p) : null);
                 return field;
             }
         }
@@ -373,7 +374,7 @@ namespace ClassicUO.LegionScripting
         {
             get
             {
-                Item i = OnMain(() => World.Player.FindItemByLayer(Layer.Bank));
+                Item i = OnMain(() => World?.Player?.FindItemByLayer(Layer.Bank));
                 return i != null ? i.Serial : 0;
             }
         }
@@ -521,6 +522,15 @@ namespace ClassicUO.LegionScripting
         }
 
         /// <summary>
+        /// Returns true if the given key combination is currently held down.
+        /// The key format matches <c>OnHotKey</c>, e.g. "CTRL+SHIFT+F1" or "A".
+        /// Extra modifiers beyond those specified do not prevent a match.
+        /// </summary>
+        /// <param name="key">Key combination to check, e.g. "CTRL+SHIFT+F1".</param>
+        /// <returns>True if the combination is currently pressed, false otherwise.</returns>
+        public bool IsKeyPressed(string key) => OnMain(() => CUOKeyboard.IsKeyPressed(key));
+
+        /// <summary>
         /// Schedules a callback to be invoked after a specified delay.
         ///
         /// Note that as with keyboard hotkeys, you must call `ProcessCallbacks` for the callback to actually be run.
@@ -572,7 +582,13 @@ namespace ClassicUO.LegionScripting
                     if (callbackData.TimesToRepeat < 0 || callbackData.TimesInvoked <= (ulong)callbackData.TimesToRepeat)
                         timer.Start();
                     else
-                        RemoveTimedCallback(id);
+                    {
+                        // Final invocation: the callback was just dispatched to the queue, so don't mark
+                        // it for cancellation (that would prevent the pending wrapped action from running).
+                        _timedCallbacks.TryRemove(id, out _);
+                        timer.Stop();
+                        timer.Dispose();
+                    }
                 }
             };
 
@@ -685,7 +701,11 @@ namespace ClassicUO.LegionScripting
         /// Sets the player's war mode state (peace/war toggle).
         /// </summary>
         /// <param name="enabled">True to enable war mode, false to disable war mode</param>
-        public void SetWarMode(bool enabled) => OnMain(() => GameActions.RequestWarMode(World.Player, enabled));
+        public void SetWarMode(bool enabled) => OnMain(() =>
+        {
+            if (World?.Player != null)
+                GameActions.RequestWarMode(World.Player, enabled);
+        });
 
         /// <summary>
         /// Attempt to bandage yourself. Older clients this will not work, you will need to find a bandage, use it, and target yourself.
@@ -717,6 +737,12 @@ namespace ClassicUO.LegionScripting
         public ApiItem ClearLeftHand() => OnMain
         (() =>
             {
+                if (World?.Player == null)
+                {
+                    Found = 0;
+                    return null;
+                }
+
                 Item i = World.Player.FindItemByLayer(Layer.OneHanded);
 
                 if (i != null)
@@ -746,6 +772,12 @@ namespace ClassicUO.LegionScripting
         public ApiItem ClearRightHand() => OnMain
         (() =>
             {
+                if (World?.Player == null)
+                {
+                    Found = 0;
+                    return null;
+                }
+
                 Item i = World.Player.FindItemByLayer(Layer.TwoHanded);
 
                 if (i != null)
@@ -810,6 +842,34 @@ namespace ClassicUO.LegionScripting
                     return (int)Utility.ContentsCount(i);
 
                 return 0;
+            }
+        );
+
+        /// <summary>
+        /// Get the names of all spells scribed into a spellbook.
+        /// Example:
+        /// ```py
+        /// spells = API.GetSpellsInSpellbook(book_serial)
+        /// if spells:
+        ///   for spell in spells:
+        ///     API.SysMsg(spell)
+        /// ```
+        /// </summary>
+        /// <param name="serial">Serial of the spellbook item</param>
+        /// <returns>An array of spell names contained in the book. Empty if the serial is not a spellbook.</returns>
+        public string[] GetSpellsInSpellbook(uint serial) => OnMain<string[]>
+        (() =>
+            {
+                Item spellbook = World.Items.Get(serial);
+
+                if (spellbook == null)
+                {
+                    return Array.Empty<string>();
+                }
+
+                return SpellbookGump.GetSpellDefinitions(spellbook)
+                    .Select(s => s.GetLocalizedName())
+                    .ToArray();
             }
         );
 
@@ -883,7 +943,7 @@ namespace ClassicUO.LegionScripting
 
                 if (result.HasValue)
                     return result.Value;
-                
+
                 Thread.Sleep(1);
             }
 
@@ -1054,6 +1114,9 @@ namespace ClassicUO.LegionScripting
         public void QueueMoveItemOffset(uint serial, ushort amt = 0, int x = 0, int y = 0, int z = 0, bool OSI = false) => OnMain
         (() =>
             {
+                if (World?.Map == null || World?.Player == null)
+                    return;
+
                 World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
 
                 bool useCalculatedZ = false;
@@ -1095,6 +1158,9 @@ namespace ClassicUO.LegionScripting
         public void MoveItemOffset(uint serial, int amt = 0, int x = 0, int y = 0, int z = 0, bool OSI = false) => OnMain
         (() =>
             {
+                if (World?.Map == null || World?.Player == null)
+                    return;
+
                 World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
 
                 bool useCalculatedZ = false;
@@ -1168,6 +1234,9 @@ namespace ClassicUO.LegionScripting
 
             if (container == uint.MaxValue && z == sbyte.MaxValue && x != ushort.MaxValue && y != ushort.MaxValue)
             {
+                if (World?.Map == null)
+                    return;
+
                 World.Map.GetMapZ(x, y, out sbyte landZ, out sbyte staticZ);
                 z = Math.Max(landZ, staticZ);
             }
@@ -1193,18 +1262,20 @@ namespace ClassicUO.LegionScripting
         /// </summary>
         /// <param name="skillName">Can be a partial match. Will match the first skill containing this text.</param>
         public void UseSkill(string skillName) => OnMain
-        (() =>
+            (() =>
             {
-                if (skillName.Length > 0)
-                {
-                    for (int i = 0; i < World.Player.Skills.Length; i++)
-                    {
-                        if (World.Player.Skills[i].Name.IndexOf(skillName, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            GameActions.UseSkill(World.Player.Skills[i].Index);
+                if (World.Player?.Skills == null || string.IsNullOrEmpty(skillName))
+                    return;
 
-                            break;
-                        }
+                for (int i = 0; i < World.Player.Skills.Length; i++)
+                {
+                    Skill skill = World.Player.Skills[i];
+
+                    if (skill?.Name?.IndexOf(skillName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        GameActions.UseSkill(skill.Index);
+
+                        break;
                     }
                 }
             }
@@ -1469,7 +1540,7 @@ namespace ClassicUO.LegionScripting
 
             foreach (ushort id in active)
             {
-                SpellDefinition spell = SpellDefinition.FullIndexGetSpell(id);
+                var spell = SpellDefinition.FullIndexGetSpell(id);
 
                 if (spell != null && !string.IsNullOrEmpty(spell.Name) && spell != SpellDefinition.EmptySpell)
                     result.Add(spell.Name);
@@ -1558,6 +1629,9 @@ namespace ClassicUO.LegionScripting
         public void HeadMsg(string message, uint serial, ushort hue = ushort.MaxValue) => OnMain
         (() =>
             {
+                if (string.IsNullOrEmpty(message))
+                    return;
+
                 Entity e = World.Get(serial);
 
                 if (e == null)
@@ -1946,6 +2020,53 @@ namespace ClassicUO.LegionScripting
             (() => { Game.Managers.CoolDownBarManager.AddCoolDownBar(World, TimeSpan.FromSeconds(seconds), text, hue, false); });
 
         /// <summary>
+        /// Updates an existing cooldown bar. Only the provided values are applied.
+        /// Example:
+        /// ```py
+        /// API.UpdateCooldown("Healing", maxValue=10, currentValue=5)
+        /// ```
+        /// </summary>
+        /// <param name="name">Name of the cooldown bar to update</param>
+        /// <param name="maxValue">New total duration in seconds. Omit or pass -1 to leave unchanged</param>
+        /// <param name="currentValue">New remaining time in seconds. Omit or pass -1 to leave unchanged</param>
+        public void UpdateCooldown(string name, double maxValue = -1, double currentValue = -1) => OnMain
+            (() => { Game.Managers.CoolDownBarManager.UpdateCoolDownBar(name, maxValue > 0 ? TimeSpan.FromSeconds(maxValue) : null, currentValue > 0 ? TimeSpan.FromSeconds(currentValue) : null); });
+
+        /// <summary>
+        /// Restarts the countdown of an existing cooldown bar to its full duration.
+        /// Example:
+        /// ```py
+        /// API.RestartCooldown("Healing")
+        /// ```
+        /// </summary>
+        /// <param name="name">Name of the cooldown bar to restart</param>
+        public void RestartCooldown(string name) => OnMain
+            (() => { Game.Managers.CoolDownBarManager.RestartCoolDownBar(name); });
+
+        /// <summary>
+        /// Deletes an existing cooldown bar.
+        /// Example:
+        /// ```py
+        /// API.DeleteCooldown("Healing")
+        /// ```
+        /// </summary>
+        /// <param name="name">Name of the cooldown bar to delete</param>
+        public void DeleteCooldown(string name) => OnMain
+            (() => { Game.Managers.CoolDownBarManager.DeleteCoolDownBar(name); });
+
+        /// <summary>
+        /// Checks whether a cooldown bar with the given name exists.
+        /// Example:
+        /// ```py
+        /// if API.CooldownExists("Healing"):
+        /// ```
+        /// </summary>
+        /// <param name="name">Name of the cooldown bar to check</param>
+        /// <returns>True if the cooldown bar exists, false otherwise</returns>
+        public bool CooldownExists(string name) => OnMain
+            (() => Game.Managers.CoolDownBarManager.CoolDownBarExists(name));
+
+        /// <summary>
         /// Adds an item or mobile to your ignore list.
         /// These are unique lists per script. Ignoring an item in one script, will not affect other running scripts.
         /// Example:
@@ -2002,16 +2123,25 @@ namespace ClassicUO.LegionScripting
         /// <param name="distance">Distance away from goal to stop.</param>
         /// <param name="wait">True/False if you want to wait for pathfinding to complete or time out</param>
         /// <param name="timeout">Seconds to wait before cancelling waiting</param>
+        /// <param name="run">True/False should we run?</param>
         /// <returns>true/false if a path was generated</returns>
-        public bool Pathfind(int x, int y, int z = int.MinValue, int distance = 1, bool wait = false, int timeout = 10)
+        public bool Pathfind(int x, int y, int z = int.MinValue, int distance = 1, bool wait = false, int timeout = 10, bool run = true)
         {
             bool pathFindStatus = OnMain
             (() =>
                 {
-                    if (z == int.MinValue)
-                        z = World.Map.GetTileZ(x, y);
+                    if (World?.Player == null)
+                        return false;
 
-                    return World.Player.Pathfinder.WalkTo(x, y, z, distance);
+                    if (z == int.MinValue)
+                    {
+                        if (World.Map == null)
+                            return false;
+
+                        z = World.Map.GetTileZ(x, y);
+                    }
+
+                    return World.Player.Pathfinder.WalkTo(x, y, z, distance, run);
                 }
             );
 
@@ -2023,20 +2153,20 @@ namespace ClassicUO.LegionScripting
 
             DateTime expire = DateTime.Now.AddSeconds(timeout);
 
-            while (OnMain(() => World.Player.Pathfinder.AutoWalking) && !StopRequested)
+            while (OnMain(() => World.Player?.Pathfinder?.AutoWalking == true) && !StopRequested)
             {
                 if (DateTime.Now >= expire)
                 {
-                    OnMain(() => World.Player.Pathfinder.StopAutoWalk());
+                    OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
                     return false;
                 }
 
                 Thread.Sleep(1);
             }
 
-            OnMain(() => World.Player.Pathfinder.StopAutoWalk());
+            OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
 
-            return OnMain(() => World.Player.DistanceFrom(new Vector2(x, y)) <= distance);
+            return OnMain(() => World.Player != null && World.Player.DistanceFrom(new Vector2(x, y)) <= distance);
         }
 
         /// <summary>
@@ -2052,20 +2182,24 @@ namespace ClassicUO.LegionScripting
         /// <param name="distance">Distance to stop from goal</param>
         /// <param name="wait">True/False if you want to wait for pathfinding to complete or time out</param>
         /// <param name="timeout">Seconds to wait before cancelling waiting</param>
+        /// <param name="run">True/False should we run?</param>
         /// <returns>true/false if a path was generated</returns>
-        public bool PathfindEntity(uint entity, int distance = 1, bool wait = false, int timeout = 10)
+        public bool PathfindEntity(uint entity, int distance = 1, bool wait = false, int timeout = 10, bool run = true)
         {
             int x = 0, y = 0, z = 0;
             bool pathFindStatus = OnMain
             (() =>
                 {
+                    if (World?.Player == null)
+                        return false;
+
                     Entity mob = World.Get(entity);
                     if (mob != null)
                     {
                         x = mob.X;
                         y = mob.Y;
                         z = mob.Z;
-                        return World.Player.Pathfinder.WalkTo(x, y, z, distance);
+                        return World.Player.Pathfinder.WalkTo(x, y, z, distance, run);
                     }
 
                     return false;
@@ -2080,19 +2214,19 @@ namespace ClassicUO.LegionScripting
 
             DateTime expire = DateTime.Now.AddSeconds(timeout);
 
-            while (OnMain(() => World.Player.Pathfinder.AutoWalking) && !StopRequested)
+            while (OnMain(() => World.Player?.Pathfinder?.AutoWalking == true) && !StopRequested)
             {
                 if (DateTime.Now >= expire)
                 {
-                    OnMain(() => World.Player.Pathfinder.StopAutoWalk());
+                    OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
                     return false;
                 }
 
                 Thread.Sleep(1);
             }
 
-            OnMain(() => World.Player.Pathfinder.StopAutoWalk());
-            return OnMain(() => World.Player.DistanceFrom(new Vector2(x, y)) <= distance);
+            OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
+            return OnMain(() => World.Player != null && World.Player.DistanceFrom(new Vector2(x, y)) <= distance);
         }
 
         /// <summary>
@@ -2148,8 +2282,16 @@ namespace ClassicUO.LegionScripting
         public IList<ApiPoint3D> GetPath(int x, int y, int z = int.MinValue, int distance = 1) =>
             OnMain(() =>
             {
+                if (World?.Player == null)
+                    return null;
+
                 if (z == int.MinValue)
+                {
+                    if (World.Map == null)
+                        return null;
+
                     z = World.Map.GetTileZ(x, y);
+                }
 
                 List<(int X, int Y, int Z)> path = World.Player.Pathfinder.GetPathTo(x, y, z, distance);
 
@@ -2200,7 +2342,7 @@ namespace ClassicUO.LegionScripting
         public void Run(string direction)
         {
             Direction d = Utility.GetDirection(direction);
-            OnMain(() => World.Player.Walk(d, true));
+            OnMain(() => { if (World?.Player != null) World.Player.Walk(d, true); });
         }
 
         /// <summary>
@@ -2214,7 +2356,7 @@ namespace ClassicUO.LegionScripting
         public void Walk(string direction)
         {
             Direction d = Utility.GetDirection(direction);
-            OnMain(() => World.Player.Walk(d, false));
+            OnMain(() => { if (World?.Player != null) World.Player.Walk(d, false); });
         }
 
         /// <summary>
@@ -2230,7 +2372,7 @@ namespace ClassicUO.LegionScripting
             {
                 Direction d = Utility.GetDirection(direction);
 
-                if (d != Direction.NONE && World.Player.Direction != d)
+                if (d != Direction.NONE && World?.Player != null && World.Player.Direction != d)
                     World.Player.Walk(d, false);
             }
         );
@@ -2257,6 +2399,9 @@ namespace ClassicUO.LegionScripting
         public void Dismount(bool skipQueue = true) => OnMain
         (() =>
             {
+                if (World?.Player == null)
+                    return;
+
                 if (World.Player.FindItemByLayer(Layer.Mount) != null)
                 {
                     if (skipQueue)
@@ -2474,7 +2619,7 @@ namespace ClassicUO.LegionScripting
 
                     if (info.IsLand)
                     {
-                        var land = World.Map.GetTile(info.X, info.Y) as Land;
+                        var land = World.Map?.GetTile(info.X, info.Y) as Land;
                         return land is null ? null : new ApiLand(land);
                     }
 
@@ -2494,7 +2639,58 @@ namespace ClassicUO.LegionScripting
         /// API.TargetSelf()
         /// ```
         /// </summary>
-        public void TargetSelf() => OnMain(() => World.TargetManager.Target(World.Player.Serial));
+        public void TargetSelf() => OnMain(() =>
+        {
+            if (World?.Player != null)
+                World.TargetManager.Target(World.Player.Serial);
+        });
+
+        /// <summary>
+        /// Target the spot at an offset from your position, resolving it the same way a click would:
+        /// the topmost visible object there is targeted, whether that is an entity, a static/multi, or land.
+        /// Example:
+        /// ```py
+        /// API.TargetRel(1, 1)
+        /// ```
+        /// </summary>
+        /// <param name="xOffset">X offset from your position, in tiles.</param>
+        /// <param name="yOffset">Y offset from your position, in tiles.</param>
+        /// <param name="tilesOnly">When true (default), entities are ignored and only statics/multi or land are targeted.</param>
+        public void TargetRel(int xOffset, int yOffset, bool tilesOnly = true) => OnMain
+        (() =>
+            {
+                if (!World.TargetManager.IsTargeting || World?.Map == null || World?.Player == null)
+                    return;
+
+                ushort x = (ushort)(World.Player.X + xOffset);
+                ushort y = (ushort)(World.Player.Y + yOffset);
+
+                GameObject top = null;
+                for (GameObject obj = World.Map.GetTile(x, y); obj != null; obj = obj.TNext)
+                {
+                    if (obj.AlphaHue != 0 && obj is not GameEffect && (!tilesOnly || obj is not Entity))
+                        top = obj;
+                }
+
+                switch (top)
+                {
+                    case Entity ent:
+                        World.TargetManager.Target(ent.Serial);
+
+                        break;
+
+                    case Land land:
+                        World.TargetManager.Target(0, land.X, land.Y, land.Z, land.TileData.IsWet);
+
+                        break;
+
+                    case GameObject gameObject:
+                        World.TargetManager.Target(gameObject.Graphic, gameObject.X, gameObject.Y, gameObject.Z);
+
+                        break;
+                }
+            }
+        );
 
         /// <summary>
         /// Target a land tile relative to your position.
@@ -2509,7 +2705,7 @@ namespace ClassicUO.LegionScripting
         public void TargetLandRel(int xOffset, int yOffset) => OnMain
         (() =>
             {
-                if (!World.TargetManager.IsTargeting)
+                if (!World.TargetManager.IsTargeting || World?.Map == null || World?.Player == null)
                     return;
 
                 ushort x = (ushort)(World.Player.X + xOffset);
@@ -2521,8 +2717,8 @@ namespace ClassicUO.LegionScripting
         );
 
         /// <summary>
-        /// Target a tile relative to your location.
-        /// If this doesn't work, try TargetLandRel instead.'
+        /// Target the highest visible object at a tile relative to your location, skipping land.
+        /// Resolves the spot the same way <see cref="TargetRel"/> does, but never falls back to land.
         /// Example:
         /// ```py
         /// API.TargetTileRel(1, 1)
@@ -2530,22 +2726,44 @@ namespace ClassicUO.LegionScripting
         /// </summary>
         /// <param name="xOffset">X Offset from your position</param>
         /// <param name="yOffset">Y Offset from your position</param>
-        /// <param name="graphic">Optional graphic, will try to use the graphic of the tile at that location if left empty.</param>
-        public void TargetTileRel(int xOffset, int yOffset, ushort graphic = ushort.MaxValue) => OnMain
+        /// <param name="graphic">Optional graphic, will try to use the graphic of the highest tile at that location if left empty.</param>
+        /// <param name="tilesOnly">When true (default), entities are ignored and only statics/multi are targeted.</param>
+        public void TargetTileRel(int xOffset, int yOffset, ushort graphic = ushort.MaxValue, bool tilesOnly = true) => OnMain
         (() =>
             {
-                if (!World.TargetManager.IsTargeting)
+                if (!World.TargetManager.IsTargeting || World?.Map == null || World?.Player == null)
                     return;
 
                 ushort x = (ushort)(World.Player.X + xOffset);
                 ushort y = (ushort)(World.Player.Y + yOffset);
                 short z = World.Player.Z;
-                GameObject g = World.Map.GetTile(x, y);
 
-                if (graphic == ushort.MaxValue && g != null)
+                if (graphic == ushort.MaxValue)
                 {
-                    graphic = g.Graphic;
-                    z = g.Z;
+                    GameObject top = null;
+
+                    for (GameObject obj = World.Map.GetTile(x, y); obj != null; obj = obj.TNext)
+                    {
+                        if (obj is not Land && obj is not GameEffect && obj.AlphaHue != 0 && (!tilesOnly || obj is not Entity))
+                            top = obj;
+                    }
+
+                    switch (top)
+                    {
+                        case Entity ent:
+                            World.TargetManager.Target(ent.Serial);
+
+                            return;
+
+                        case GameObject gameObject:
+                            graphic = gameObject.Graphic;
+                            z = gameObject.Z;
+
+                            break;
+
+                        default:
+                            return;
+                    }
                 }
 
                 World.TargetManager.Target(graphic, x, y, z);
@@ -2583,6 +2801,46 @@ namespace ClassicUO.LegionScripting
         /// ```
         /// </summary>
         public void CancelTarget() => OnMain(World.TargetManager.CancelTarget);
+
+        /// <summary>
+        /// Override the client's last target. Pass a serial for an entity, or a location (x/y/z)
+        /// for a land tile. Include graphic to mark the location as a static instead.
+        /// Example:
+        /// ```py
+        /// API.SetLastTarget(serial=0x12345678)
+        /// API.SetLastTarget(x=1243, y=1337, z=0)
+        /// API.SetLastTarget(x=1243, y=1337, z=0, graphic=0x1)
+        /// ```
+        /// </summary>
+        /// <param name="serial">Serial of the item/mobile to target. Takes precedence over location.</param>
+        /// <param name="x">X coordinate of the target location.</param>
+        /// <param name="y">Y coordinate of the target location.</param>
+        /// <param name="z">Z coordinate of the target location.</param>
+        /// <param name="graphic">Graphic of the static at the location. Omit to target land.</param>
+        public void SetLastTarget(uint? serial = null, ushort? x = null, ushort? y = null, short? z = null, ushort? graphic = null) => OnMain
+        (() =>
+            {
+                LastTargetInfo info = World.TargetManager.LastTargetInfo;
+
+                if (serial.HasValue && SerialHelper.IsValid(serial.Value))
+                {
+                    info.SetEntity(serial.Value);
+                }
+                else if (x.HasValue && y.HasValue && z.HasValue)
+                {
+                    if (graphic.HasValue)
+                    {
+                        info.SetStatic(graphic.Value, x.Value, y.Value, (sbyte)z.Value);
+                    }
+                    else
+                    {
+                        info.SetLand(x.Value, y.Value, (sbyte)z.Value);
+                    }
+                }
+
+                World.TargetManager.SyncLastTargetReplay();
+            }
+        );
 
         /// <summary>
         /// Sets a pre-target that will be automatically applied when the next targeting request comes from the server.
@@ -2689,6 +2947,9 @@ namespace ClassicUO.LegionScripting
         public void SetSkillLock(string skill, string up_down_locked) => OnMain
         (() =>
             {
+                if (World?.Player == null)
+                    return;
+
                 skill = skill.ToLower();
                 Game.Data.Lock status = Game.Data.Lock.Up;
 
@@ -2801,7 +3062,7 @@ namespace ClassicUO.LegionScripting
         /// OPL consists of item name and tooltip text(properties).
         /// </summary>
         /// <param name="serials">A list of object serials to request OPL data for</param>
-        public void RequestOPLData(IEnumerable serials) => OnMain(() =>
+        public void RequestOPLData(IEnumerable serials) => BubblingOnMain(() =>
         {
             if (serials == null) return;
             foreach (object o in serials)
@@ -3113,13 +3374,20 @@ namespace ClassicUO.LegionScripting
             DateTime expire = DateTime.UtcNow.AddSeconds(delay);
 
             if (ID == uint.MaxValue)
-                ID = OnMain(() => World.Player.LastGumpID);
+            {
+                uint? lastGumpId = OnMain(() => World.Player?.LastGumpID);
+
+                if (lastGumpId == null)
+                    return false;
+
+                ID = lastGumpId.Value;
+            }
 
             while (!OnMain(() => UIManager.GetGumpServer(ID) != null) && !StopRequested)
             {
                 if (DateTime.UtcNow > expire)
                     return false;
-                
+
                 Thread.Sleep(1);
             }
 
@@ -3264,10 +3532,7 @@ namespace ClassicUO.LegionScripting
         /// API.ClearSoundLog()
         /// ```
         /// </summary>
-        public void ClearSoundLog()
-        {   
-            SoundEntries.Clear();
-        }
+        public void ClearSoundLog() => SoundEntries.Clear();
 
 
         /// <summary>
@@ -3459,11 +3724,8 @@ namespace ClassicUO.LegionScripting
         /// API.Pause(5)
         /// ```
         /// </summary>
-        /// <param name="seconds">0-30 seconds.</param>
         public void Pause(double seconds)
         {
-            seconds = Math.Clamp(seconds, 0, 30);
-
             Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken: _cachedToken).Wait(cancellationToken: _cachedToken);
 
             if (StopRequested)
@@ -3537,7 +3799,7 @@ namespace ClassicUO.LegionScripting
         /// API.Virtue("honor")
         /// ```
         /// </summary>
-        /// <param name="virtue">honor/sacrifice/valor</param>
+        /// <param name="virtue">honor/sacrifice/valor/justice</param>
         public void Virtue(string virtue)
         {
             switch (virtue.ToLower())
@@ -3545,8 +3807,27 @@ namespace ClassicUO.LegionScripting
                 case "honor": OnMain(() => { AsyncNetClient.Socket.Send_InvokeVirtueRequest(0x01); }); break;
                 case "sacrifice": OnMain(() => { AsyncNetClient.Socket.Send_InvokeVirtueRequest(0x02); }); break;
                 case "valor": OnMain(() => { AsyncNetClient.Socket.Send_InvokeVirtueRequest(0x03); }); break;
+                case "justice": OnMain(() => { AsyncNetClient.Socket.Send_InvokeVirtueRequest(0x04); }); break;
             }
         }
+
+        /// <summary>
+        /// Open the quest log gump.
+        /// Example:
+        /// ```py
+        /// API.OpenQuestLog()
+        /// ```
+        /// </summary>
+        public void OpenQuestLog() => OnMain(() => GameActions.RequestQuestMenu(World));
+
+        /// <summary>
+        /// Open the help menu.
+        /// Example:
+        /// ```py
+        /// API.OpenHelp()
+        /// ```
+        /// </summary>
+        public void OpenHelp() => OnMain(() => GameActions.RequestHelp());
 
         /// <summary>
         /// Find the nearest item/mobile based on scan type.
@@ -3609,6 +3890,9 @@ namespace ClassicUO.LegionScripting
             return BubblingOnMain
             (() =>
                 {
+                    if (World?.Player == null)
+                        return null;
+
                     Mobile mob = World.Mobiles.Values.Where
                     (m => !m.IsDestroyed && !m.IsDead && m.Serial != World.Player.Serial && requestedNotoriety.Contains
                             ((Notoriety)(byte)m.NotorietyFlag) && m.Distance <= maxDistance && !OnIgnoreList(m)
@@ -3674,6 +3958,9 @@ namespace ClassicUO.LegionScripting
 
                 Notoriety[] requestedNotoriety = Utility.ConvertNotorietyOrThrow(notoriety);
 
+                if (World?.Player == null)
+                    return null;
+
                 Mobile[] list = World.Mobiles.Values.Where
                 (m => !m.IsDestroyed && !m.IsDead && m.Serial != World.Player.Serial && requestedNotoriety.Contains
                      ((Notoriety)(byte)m.NotorietyFlag) && m.Distance <= maxDistance && !OnIgnoreList(m)
@@ -3713,6 +4000,7 @@ namespace ClassicUO.LegionScripting
 
         /// <summary>
         /// Return a list of all mobiles the client is aware of, optionally filtered by graphic, distance, and/or notoriety.
+        /// Any additional filter is ignored unless supplied.
         /// Example:
         /// ```py
         /// # Get all mobiles
@@ -3723,27 +4011,94 @@ namespace ClassicUO.LegionScripting
         /// nearby_humans = API.GetAllMobiles(400, 5)
         /// # Get all enemies (murderers and criminals) within 15 tiles
         /// enemies = API.GetAllMobiles(distance=15, notoriety=[API.Notoriety.Murderer, API.Notoriety.Criminal])
+        /// # Get all mobiles sorted by current hits, lowest first
+        /// sorted_by_hits = API.GetAllMobiles(sortby="hits")
+        /// # Get all poisonous ogres within 10 tiles in line of sight
+        /// targets = API.GetAllMobiles(name="ogre", distance=10, poisoned=True, hasLineOfSight=True)
+        /// # Get only dead friends with a specific hue, at least 2 tiles away
+        /// ghosts = API.GetAllMobiles(isGhost=True, isFriend=True, minDistance=2, hues=[0x83EA])
         /// ```
         /// </summary>
         /// <param name="graphic">Optional graphic ID to filter by</param>
         /// <param name="distance">Optional maximum distance from player</param>
         /// <param name="notoriety">Optional list of notoriety flags to filter by</param>
+        /// <param name="sortby">Sort order, case insensitive: "Distance", "Hits" or "MaxHits". Defaults to "Distance".</param>
+        /// <param name="name">Optional partial name to match, case insensitive</param>
+        /// <param name="graphics">Optional list of graphic IDs to match; a mobile matches if its graphic equals any entry</param>
+        /// <param name="minDistance">Optional minimum distance from player</param>
+        /// <param name="isHuman">When set, only include (True) or exclude (False) humanoid mobiles</param>
+        /// <param name="isFemale">When set, only include (True) or exclude (False) female mobiles</param>
+        /// <param name="isGhost">When set, only include (True) or exclude (False) ghosts (dead mobiles)</param>
+        /// <param name="isFriend">When set, only include (True) or exclude (False) mobiles on the friends list</param>
+        /// <param name="poisoned">When set, only include (True) or exclude (False) poisoned mobiles</param>
+        /// <param name="paralyzed">When set, only include (True) or exclude (False) paralyzed mobiles</param>
+        /// <param name="hasLineOfSight">When set, only include (True) or exclude (False) mobiles with line of sight to the player</param>
+        /// <param name="hues">Optional list of hues to match; a mobile matches if its hue equals any entry</param>
         /// <returns></returns>
-        public ApiMobile[] GetAllMobiles(ushort? graphic = null, int? distance = null, IList<Notoriety> notoriety = null) => BubblingOnMain(() =>
+        public ApiMobile[] GetAllMobiles(ushort? graphic = null, int? distance = null, IList<Notoriety> notoriety = null, string sortby = "Distance", string name = null, ushort[] graphics = null, int? minDistance = null, bool? isHuman = null, bool? isFemale = null, bool? isGhost = null, bool? isFriend = null, bool? poisoned = null, bool? paralyzed = null, bool? hasLineOfSight = null, ushort[] hues = null) => BubblingOnMain(() =>
         {
             IEnumerable<Mobile> mobiles = World.Mobiles.Values.AsEnumerable();
 
             if (graphic.HasValue)
                 mobiles = mobiles.Where(m => m.Graphic == graphic.Value);
 
+            if (graphics != null && graphics.Length > 0)
+            {
+                HashSet<ushort> requestedGraphics = new(graphics);
+                mobiles = mobiles.Where(m => requestedGraphics.Contains(m.Graphic));
+            }
+
             if (distance.HasValue)
                 mobiles = mobiles.Where(m => m.Distance <= distance.Value);
+
+            if (minDistance.HasValue)
+                mobiles = mobiles.Where(m => m.Distance >= minDistance.Value);
+
+            if (!string.IsNullOrWhiteSpace(name))
+                mobiles = mobiles.Where(m => m.Name.ContainsIgnoreCase(name));
+
+            if (isHuman.HasValue)
+                mobiles = mobiles.Where(m => m.IsHuman == isHuman.Value);
+
+            if (isFemale.HasValue)
+                mobiles = mobiles.Where(m => m.IsFemale == isFemale.Value);
+
+            if (isGhost.HasValue)
+                mobiles = mobiles.Where(m => m.IsDead == isGhost.Value);
+
+            if (isFriend.HasValue)
+            {
+                HashSet<uint> friends = new(FriendsListManager.Instance.GetAllFriends());
+                mobiles = mobiles.Where(m => friends.Contains(m.Serial) == isFriend.Value);
+            }
+
+            if (poisoned.HasValue)
+                mobiles = mobiles.Where(m => m.IsPoisoned == poisoned.Value);
+
+            if (paralyzed.HasValue)
+                mobiles = mobiles.Where(m => m.IsParalyzed == paralyzed.Value);
+
+            if (hasLineOfSight.HasValue)
+                mobiles = mobiles.Where(m => m.HasLineOfSightFrom() == hasLineOfSight.Value);
+
+            if (hues != null && hues.Length > 0)
+            {
+                HashSet<ushort> requestedHues = new(hues);
+                mobiles = mobiles.Where(m => requestedHues.Contains(m.Hue));
+            }
 
             if (notoriety != null && notoriety.Count > 0)
             {
                 Notoriety[] requestedNotoriety = Utility.ConvertNotorietyOrThrow(notoriety);
                 mobiles = mobiles.Where(m => requestedNotoriety.Contains((Notoriety)(byte)m.NotorietyFlag));
             }
+
+            mobiles = sortby.Trim().ToLowerInvariant() switch
+            {
+                "hits" => mobiles.OrderBy(m => m.Hits),
+                "maxhits" => mobiles.OrderBy(m => m.HitsMax),
+                _ => mobiles.OrderBy(m => m.Distance),
+            };
 
             return mobiles.Select(m => new ApiMobile(m)).ToArray();
         });
@@ -3760,7 +4115,7 @@ namespace ClassicUO.LegionScripting
         /// <param name="x"></param>
         /// <param name="y"></param>
         /// <returns>A GameObject of that location.</returns>
-        public ApiGameObject GetTile(int x, int y) => OnMain(() => { return new ApiGameObject(World.Map.GetTile(x, y)); });
+        public ApiGameObject GetTile(int x, int y) => OnMain(() => { return World?.Map == null ? null : new ApiGameObject(World.Map.GetTile(x, y)); });
 
         /// <summary>
         /// Gets all static objects at a specific position (x, y coordinates).
@@ -4027,82 +4382,167 @@ namespace ClassicUO.LegionScripting
         /// <summary>
         /// Use API.Gumps.CreateGump instead
         /// </summary>
-        public ApiUiBaseGump CreateGump(bool acceptMouseInput = true, bool canMove = true, bool keepOpen = false) => Gumps.CreateGump(acceptMouseInput, canMove, keepOpen);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiBaseGump CreateGump(bool acceptMouseInput = true, bool canMove = true, bool keepOpen = false)
+        {
+            GameActions.Print("API.CreateGump will be removed soon, update your script to use API.Gumps.CreateGump instead", Constants.HUE_WARN);
+            return Gumps.CreateGump(acceptMouseInput, canMove, keepOpen);
+        }
         /// <summary>
         /// Use API.Gumps.AddGump instead
         /// </summary>
-        public void AddGump(object g) => Gumps.AddGump(g);
+        [Obsolete("Remove after 11-1-26")]
+        public void AddGump(object g)
+        {
+            GameActions.Print("API.AddGump will be removed soon, update your script to use API.Gumps.AddGump instead", Constants.HUE_WARN);
+            Gumps.AddGump(g);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpCheckbox instead.
         /// </summary>
-        public ApiUiCheckbox CreateGumpCheckbox(string text = "", ushort hue = 0, bool isChecked = false) => Gumps.CreateGumpCheckbox(text, hue, isChecked);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiCheckbox CreateGumpCheckbox(string text = "", ushort hue = 0, bool isChecked = false)
+        {
+            GameActions.Print("API.CreateGumpCheckbox will be removed soon, update your script to use API.Gumps.CreateGumpCheckbox instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpCheckbox(text, hue, isChecked);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpLabel instead.
         /// </summary>
-        public ApiUiLabel CreateGumpLabel(string text, ushort hue = 996) => Gumps.CreateGumpLabel(text, hue);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiLabel CreateGumpLabel(string text, ushort hue = 996)
+        {
+            GameActions.Print("API.CreateGumpLabel will be removed soon, update your script to use API.Gumps.CreateGumpLabel instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpLabel(text, hue);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpColorBox instead.
         /// </summary>
-        public ApiUiAlphaBlendControl CreateGumpColorBox(float opacity = 0.7f, string color = "#000000") => Gumps.CreateGumpColorBox(opacity, color);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiAlphaBlendControl CreateGumpColorBox(float opacity = 0.7f, string color = "#000000")
+        {
+            GameActions.Print("API.CreateGumpColorBox will be removed soon, update your script to use API.Gumps.CreateGumpColorBox instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpColorBox(opacity, color);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpItemPic instead.
         /// </summary>
-        public ApiUiResizableStaticPic CreateGumpItemPic(uint graphic, int width, int height) => Gumps.CreateGumpItemPic(graphic, width, height);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiResizableStaticPic CreateGumpItemPic(uint graphic, int width, int height)
+        {
+            GameActions.Print("API.CreateGumpItemPic will be removed soon, update your script to use API.Gumps.CreateGumpItemPic instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpItemPic(graphic, width, height);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpButton instead.
         /// </summary>
+        [Obsolete("Remove after 11-1-26")]
         public ApiUiButton CreateGumpButton(string text = "", ushort hue = 996, ushort normal = 0x00EF, ushort pressed = 0x00F0, ushort hover = 0x00EE)
-            => Gumps.CreateGumpButton(text, hue, normal, pressed, hover);
+        {
+            GameActions.Print("API.CreateGumpButton will be removed soon, update your script to use API.Gumps.CreateGumpButton instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpButton(text, hue, normal, pressed, hover);
+        }
         /// <summary>
         /// Use API.Gumps.CreateSimpleButton instead.
         /// </summary>
-        public ApiUiNiceButton CreateSimpleButton(string text, int width, int height) => Gumps.CreateSimpleButton(text, width, height);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiNiceButton CreateSimpleButton(string text, int width, int height)
+        {
+            GameActions.Print("API.CreateSimpleButton will be removed soon, update your script to use API.Gumps.CreateSimpleButton instead", Constants.HUE_WARN);
+            return Gumps.CreateSimpleButton(text, width, height);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpRadioButton instead.
         /// </summary>
+        [Obsolete("Remove after 11-1-26")]
         public ApiUiRadioButton CreateGumpRadioButton(string text = "", int group = 0, ushort inactive = 0x00D0, ushort active = 0x00D1, ushort hue = 0xFFFF, bool isChecked = false)
-            => Gumps.CreateGumpRadioButton(text, group, inactive, active, hue, isChecked);
+        {
+            GameActions.Print("API.CreateGumpRadioButton will be removed soon, update your script to use API.Gumps.CreateGumpRadioButton instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpRadioButton(text, group, inactive, active, hue, isChecked);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpTextBox instead.
         /// </summary>
-        public ApiUiTtfTextInputField CreateGumpTextBox(string text = "", int width = 200, int height = 30, bool multiline = false)
-            => Gumps.CreateGumpTextBox(text, width, height, multiline);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiTtfTextInputField CreateGumpTextBox(string text = "", int width = 200, int height = 30, bool multiline = false, float fontSize = 20)
+        {
+            GameActions.Print("API.CreateGumpTextBox will be removed soon, update your script to use API.Gumps.CreateGumpTextBox instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpTextBox(text, width, height, multiline, fontSize);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpTTFLabel instead.
         /// </summary>
+        [Obsolete("Remove after 11-1-26")]
         public ApiUiTextBox CreateGumpTTFLabel
             (string text, float size, string color = "#FFFFFF", string font = TrueTypeLoader.EMBEDDED_FONT, string aligned = "left", int maxWidth = 0, bool applyStroke = false)
-            => Gumps.CreateGumpTTFLabel(text, size, color, font, aligned, maxWidth, applyStroke);
+        {
+            GameActions.Print("API.CreateGumpTTFLabel will be removed soon, update your script to use API.Gumps.CreateGumpTTFLabel instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpTTFLabel(text, size, color, font, aligned, maxWidth, applyStroke);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpSimpleProgressBar instead.
         /// </summary>
+        [Obsolete("Remove after 11-1-26")]
         public ApiUiSimpleProgressBar CreateGumpSimpleProgressBar
             (int width, int height, string backgroundColor = "#616161", string foregroundColor = "#212121", int value = 100, int max = 100)
-            => Gumps.CreateGumpSimpleProgressBar(width, height, backgroundColor, foregroundColor, value, max);
+        {
+            GameActions.Print("API.CreateGumpSimpleProgressBar will be removed soon, update your script to use API.Gumps.CreateGumpSimpleProgressBar instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpSimpleProgressBar(width, height, backgroundColor, foregroundColor, value, max);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpScrollArea instead.
         /// </summary>
-        public ApiUiScrollArea CreateGumpScrollArea(int x, int y, int width, int height) => Gumps.CreateGumpScrollArea(x, y, width, height);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiScrollArea CreateGumpScrollArea(int x, int y, int width, int height)
+        {
+            GameActions.Print("API.CreateGumpScrollArea will be removed soon, update your script to use API.Gumps.CreateGumpScrollArea instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpScrollArea(x, y, width, height);
+        }
         /// <summary>
         /// Use API.Gumps.CreateGumpPic instead.
         /// </summary>
-        public ApiUiGumpPic CreateGumpPic(ushort graphic, int x = 0, int y = 0, ushort hue = 0) => Gumps.CreateGumpPic(graphic, x, y, hue);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiGumpPic CreateGumpPic(ushort graphic, int x = 0, int y = 0, ushort hue = 0)
+        {
+            GameActions.Print("API.CreateGumpPic will be removed soon, update your script to use API.Gumps.CreateGumpPic instead", Constants.HUE_WARN);
+            return Gumps.CreateGumpPic(graphic, x, y, hue);
+        }
         /// <summary>
         /// Use API.Gumps.CreateDropDown instead.
         /// </summary>
-        public ApiUiControlDropDown CreateDropDown(int width, IList<string> items, int selectedIndex = 0) => Gumps.CreateDropDown(width, items, selectedIndex);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiControlDropDown CreateDropDown(int width, IList<string> items, int selectedIndex = 0)
+        {
+            GameActions.Print("API.CreateDropDown will be removed soon, update your script to use API.Gumps.CreateDropDown instead", Constants.HUE_WARN);
+            return Gumps.CreateDropDown(width, items, selectedIndex);
+        }
         /// <summary>
         /// Use API.Gumps.CreateModernGump instead.
         /// </summary>
-        public ApiUiNineSliceGump CreateModernGump(int x, int y, int width, int height, bool resizable = true, int minWidth = 50, int minHeight = 50, object onResized = null) => Gumps.CreateModernGump(x, y, width, height, resizable, minWidth, minHeight, onResized);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiNineSliceGump CreateModernGump(int x, int y, int width, int height, bool resizable = true, int minWidth = 50, int minHeight = 50, object onResized = null)
+        {
+            GameActions.Print("API.CreateModernGump will be removed soon, update your script to use API.Gumps.CreateModernGump instead", Constants.HUE_WARN);
+            return Gumps.CreateModernGump(x, y, width, height, resizable, minWidth, minHeight, onResized);
+        }
         /// <summary>
         /// Use API.Gumps.AddControlOnClick instead.
         /// </summary>
-        public object AddControlOnClick(object control, object onClick, bool leftOnly = true) => Gumps.AddControlOnClick(control, onClick, leftOnly);
+        [Obsolete("Remove after 11-1-26")]
+        public object AddControlOnClick(object control, object onClick, bool leftOnly = true)
+        {
+            GameActions.Print("API.AddControlOnClick will be removed soon, update your script to use API.Gumps.AddControlOnClick instead", Constants.HUE_WARN);
+            return Gumps.AddControlOnClick(control, onClick, leftOnly);
+        }
         /// <summary>
         /// Use API.Gumps.AddControlOnDisposed instead.
         /// </summary>
-        public ApiUiBaseControl AddControlOnDisposed(ApiUiBaseControl control, object onDispose) => Gumps.AddControlOnDisposed(control, onDispose);
+        [Obsolete("Remove after 11-1-26")]
+        public ApiUiBaseControl AddControlOnDisposed(ApiUiBaseControl control, object onDispose)
+        {
+            GameActions.Print("API.AddControlOnDisposed will be removed soon, update your script to use API.Gumps.AddControlOnDisposed instead", Constants.HUE_WARN);
+            return Gumps.AddControlOnDisposed(control, onDispose);
+        }
 
         #endregion
 
@@ -4123,7 +4563,7 @@ namespace ClassicUO.LegionScripting
         public Skill GetSkill(string skill) => OnMain
         (() =>
             {
-                if (string.IsNullOrEmpty(skill))
+                if (string.IsNullOrEmpty(skill) || World?.Player == null)
                     return null;
 
                 foreach (Skill s in World.Player.Skills)
@@ -4263,7 +4703,7 @@ namespace ClassicUO.LegionScripting
         public IList<string> ListRunningScripts() => OnMain
         (() =>
             {
-                List<string> running = new List<string>();
+                var running = new List<string>();
 
                 foreach (ScriptFile script in LegionScripting.RunningScripts)
                     running.Add(script.RelativePath);
@@ -4314,6 +4754,9 @@ namespace ClassicUO.LegionScripting
                 WorldMapGump wmap = UIManager.GetGump<WorldMapGump>();
 
                 if (wmap == null || string.IsNullOrEmpty(name))
+                    return;
+
+                if (World?.Player == null)
                     return;
 
                 if (map == int.MaxValue)
@@ -4455,6 +4898,9 @@ namespace ClassicUO.LegionScripting
         /// <param name="label">Optional text label displayed on the tile</param>
         public void MarkTile(int x, int y, ushort hue, int map = -1, string label = null) => OnMain(() =>
         {
+            if (World?.Map == null)
+                return;
+
             if (map < 0)
                 map = World.Map.Index;
 

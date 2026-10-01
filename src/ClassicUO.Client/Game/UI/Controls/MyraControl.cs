@@ -100,18 +100,21 @@ public class MyraControl : IGui
     private void DesktopOnTouchUp(object sender, EventArgs e) =>
         OnMouseUp(Mouse.Position.X, Mouse.Position.Y, MouseButtonType.Left);
 
-    private void DesktopOnTouchDown(object sender, EventArgs e)
-    {
-        if (!Mouse.LButtonPressed && Mouse.RButtonPressed){
-            Dispose();
-            return;
-        }
+    private void DesktopOnTouchDown(object sender, TouchEventArgs e) =>
         OnMouseDown(Mouse.Position.X, Mouse.Position.Y, MouseButtonType.Left);
-    }
 
     private void DesktopOnWidgetGotKeyboardFocus(object sender, GenericEventArgs<Widget> e)
     {
-        if (e.Data.AcceptsKeyboardFocus && e.Data is Myra.Graphics2D.UI.TextBox)
+        // Deliberately narrower than AcceptsKeyboardFocus (see a55398a44): a focused ListBox,
+        // ComboBox, Tree or Window isn't something the player types into, so keys focused on one of
+        // those are meant to keep reaching the game world (WASD still moves the character). Only
+        // widgets that actually consume typed characters should claim focus here - TextBox, and
+        // SpinButton, which wraps one internally for numeric entry (PropertyGrid's int/float rows).
+        // Missing a case here leaves UIManager.KeyboardFocusControl null, which
+        // UIManager.HandleKeyboardInput then silently re-adopts as the system chat box - the state
+        // every gate in the input pipeline reads as "the world owns the keyboard" - so keys typed
+        // into the field also drive movement and hotkeys.
+        if (e.Data.AcceptsKeyboardFocus && e.Data is Myra.Graphics2D.UI.TextBox or SpinButton)
             SetKeyboardFocus();
         else
             UIManager.KeyboardFocusControl = null;
@@ -160,15 +163,15 @@ public class MyraControl : IGui
     public int ActivePage { get; set; }
     public List<IGui> Children { get; } = new();
     public ClickPriority Priority { get; set; }
-    public bool CanCloseWithRightClick { get; } = true;
-    public bool IsModal { get; } = false;
+    public bool CanCloseWithRightClick { get; set; } = true;
+    public bool IsModal { get; protected set; } = false;
     public float Alpha { get; set; }
     public bool WantUpdateSize { get; set; }
     public UILayer LayerOrder { get; set; } = UILayer.Default;
     public bool IsFromServer { get; set; }
     public Point Location { get; set; } = Point.Zero;
     public bool HasKeyboardFocus => UIManager.KeyboardFocusControl == this;
-    public bool ModalClickOutsideAreaClosesThisControl { get; } = true;
+    public bool ModalClickOutsideAreaClosesThisControl { get; protected set; } = true;
 
     /// <summary>
     /// Do not set this manually, should only be set by UIManager
@@ -339,6 +342,7 @@ public class MyraControl : IGui
     {
         if (IsDisposed)
             return;
+        IsFocused = false;
         _disposeRequested = true;
     }
 
@@ -376,10 +380,10 @@ public class MyraControl : IGui
     {
         IsFocused = false;
 
-        // A click inside an open context menu is the menu being used, not focus loss.
-        // Closing it here would detach it mid-press and the click would never complete.
-        if (_desktop.ContextMenu is { Visible: true } contextMenu &&
-            contextMenu.ContainsGlobalPoint(new Point(Mouse.Position.X + ParentX, Mouse.Position.Y + ParentY)))
+        // A click inside something the desktop is showing - an open context menu, a dialog put up by
+        // a property grid editor - is that thing being used, not focus loss. Closing it here would
+        // detach it mid-press and the click would never complete.
+        if (IsPointOverDesktop(new Point(Mouse.Position.X + ParentX, Mouse.Position.Y + ParentY), includeRoot: false))
             return;
 
         _desktop.FocusedKeyboardWidget = null;
@@ -421,8 +425,8 @@ public class MyraControl : IGui
     /// <summary>This is not in use here. Use _rootWindow events instead.</summary>
     public void InvokeMouseWheel(MouseEventType delta) { }
 
-    /// <summary>This is not in use here. Use _rootWindow events instead.</summary>
-    public void InvokeMouseCloseGumpWithRClick() { }
+    /// <summary>Right-click close is handled by UIManager through the IGui close flow.</summary>
+    public void InvokeMouseCloseGumpWithRClick() => CloseWithRightClick();
 
     /// <summary>This is not in use here. Use _rootWindow events instead.</summary>
     public void InvokeDragBegin(Point position) { }
@@ -433,7 +437,7 @@ public class MyraControl : IGui
 
     public virtual void HitTest(Point position, ref IGui res)
     {
-        if (!IsVisible || !IsEnabled || IsDisposed || !AcceptMouseInput)
+        if (!IsVisible || !IsEnabled || IsDisposed || !AcceptMouseInput || _disposeRequested)
             return;
 
         if (
@@ -447,12 +451,52 @@ public class MyraControl : IGui
         }
     }
 
+    /// <summary>
+    /// Whether a screen point lands on anything this control's desktop is showing.
+    /// <para>
+    /// <see cref="Bounds"/> only ever tracks the root window. Anything opened with
+    /// <c>Show</c>/<c>ShowModal</c> - a colour picker, a file dialog, whatever a property grid
+    /// editor puts up - is added to the desktop beside the root rather than inside it, so a dialog
+    /// that extends past the window is outside <see cref="Bounds"/> entirely. UIManager would then
+    /// hand the click to whatever is underneath, which is the viewport.
+    /// </para>
+    /// </summary>
+    /// <param name="global">The point, in screen coordinates.</param>
+    /// <param name="includeRoot">Whether the root window counts. False where the caller is asking
+    /// specifically about things layered over it.</param>
+    /// <returns>Whether the desktop owns it.</returns>
+    private bool IsPointOverDesktop(Point global, bool includeRoot = true)
+    {
+        if (_desktop == null)
+            return false;
+
+        // ContainsGlobalPoint is what Myra itself uses for IsTouchInside; a hand-rolled rect from
+        // Left/Top disagrees with it over margins and alignment, and drops clicks near the edges.
+        if (_desktop.ContextMenu is { Visible: true } contextMenu && contextMenu.ContainsGlobalPoint(global))
+            return true;
+
+        foreach (Widget widget in _desktop.Widgets)
+        {
+            if (!includeRoot && ReferenceEquals(widget, _desktop.Root))
+                continue;
+
+            if (widget.Visible && widget.ContainsGlobalPoint(global))
+                return true;
+        }
+
+        return false;
+    }
+
     public void HitTest(int x, int y, ref IGui res) => HitTest(new Point(x, y), ref res);
 
     /// <summary>This is not in use here. Use _rootWindow events instead.</summary>
     public void ChangePage(int pageIndex) { }
 
-    public void CloseWithRightClick() => Dispose();
+    public void CloseWithRightClick()
+    {
+        if (CanCloseWithRightClick)
+            Dispose();
+    }
 
     public bool Contains(int x, int y)
     {
@@ -462,15 +506,7 @@ public class MyraControl : IGui
         if (Bounds.Contains(x + ParentX, y + ParentY))
             return true;
 
-        if (_desktop.ContextMenu is { Visible: true } contextMenu)
-        {
-            // ContainsGlobalPoint is what Myra uses for IsTouchInside; a hand-rolled rect from
-            // Left/Top/Bounds disagrees with it (margin/alignment) and drops clicks in the menu.
-            if (contextMenu.ContainsGlobalPoint(new Point(x + ParentX, y + ParentY)))
-                return true;
-        }
-
-        return false;
+        return IsPointOverDesktop(new Point(x + ParentX, y + ParentY));
     }
 
     #region OnEventOccured

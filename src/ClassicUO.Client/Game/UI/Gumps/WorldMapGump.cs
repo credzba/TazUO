@@ -62,7 +62,7 @@ public class WorldMapGump : ResizableGump
     // source icon file on disk. Used by the web map so it can serve the original icon file by its
     // path instead of streaming rendered GPU textures.
     public static readonly Dictionary<string, string> _markerIconPaths = new Dictionary<string, string>();
-    private static readonly float[] _zooms = new float[10] { 0.125f, 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 4f, 6f, 8f };
+    private static readonly float[] _zooms = new float[11] { 0.125f, 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 4f, 6f, 8f, 10f };
     private static readonly Color _semiTransparentWhiteForGrid = new Color(255, 255, 255, 56);
     private static Point _last_position = new Point(100, 100);
     private static Texture2D _mapTexture;
@@ -108,6 +108,7 @@ public class WorldMapGump : ResizableGump
     private bool _showMarkerIcons = true;
     private bool _showMarkerNames = true;
     private bool _showMarkers = true;
+    private bool _alwaysShowMarkers;
     private bool _showCorpse = true;
     private bool _showMobiles = true;
     private bool _showMultis = true;
@@ -262,6 +263,7 @@ public class WorldMapGump : ResizableGump
         _showMarkers = ProfileManager.CurrentProfile.WorldMapShowMarkers;
         _showMultis = ProfileManager.CurrentProfile.WorldMapShowMultis;
         _showMarkerNames = ProfileManager.CurrentProfile.WorldMapShowMarkersNames;
+        _alwaysShowMarkers = ProfileManager.GlobalSettings?.AlwaysShowWorldMapMarkers ?? false;
 
 
         _hiddenMarkerFiles = string.IsNullOrEmpty(ProfileManager.CurrentProfile.WorldMapHiddenMarkerFiles) ? new List<string>() : ProfileManager.CurrentProfile.WorldMapHiddenMarkerFiles.Split(',').ToList();
@@ -305,6 +307,10 @@ public class WorldMapGump : ResizableGump
         ProfileManager.CurrentProfile.WorldMapShowMarkers = _showMarkers;
         ProfileManager.CurrentProfile.WorldMapShowMultis = _showMultis;
         ProfileManager.CurrentProfile.WorldMapShowMarkersNames = _showMarkerNames;
+        if (ProfileManager.GlobalSettings != null)
+        {
+            ProfileManager.GlobalSettings.AlwaysShowWorldMapMarkers = _alwaysShowMarkers;
+        }
 
         ProfileManager.CurrentProfile.WorldMapHiddenMarkerFiles = string.Join(",", _hiddenMarkerFiles);
         ProfileManager.CurrentProfile.WorldMapHiddenZoneFiles = string.Join(",", _hiddenZoneFiles);
@@ -346,6 +352,7 @@ public class WorldMapGump : ResizableGump
         _options.Clear();
 
         _options["show_all_markers"] = new ContextMenuItemEntry(TazLang.Get("show_all_markers"), () => { _showMarkers = !_showMarkers; SaveSettings(); }, true, _showMarkers);
+        _options["always_show_markers"] = new ContextMenuItemEntry(TazLang.Get("always_show_markers"), () => { _alwaysShowMarkers = !_alwaysShowMarkers; SaveSettings(); }, true, _alwaysShowMarkers);
         _options["show_marker_names"] = new ContextMenuItemEntry(TazLang.Get("show_marker_names"), () => { _showMarkerNames = !_showMarkerNames; SaveSettings(); }, true, _showMarkerNames);
         _options["show_marker_icons"] = new ContextMenuItemEntry(TazLang.Get("show_marker_icons"), () => { _showMarkerIcons = !_showMarkerIcons; SaveSettings(); }, true, _showMarkerIcons);
         _options["flip_map"] = new ContextMenuItemEntry(TazLang.Get("flip_map"), () =>
@@ -632,6 +639,7 @@ public class WorldMapGump : ResizableGump
         markersEntry.Add(new ContextMenuItemEntry(TazLang.Get("map_import_map_file", "Import Map File"), ImportMapFile));
 
         markersEntry.Add(_options["show_all_markers"]);
+        markersEntry.Add(_options["always_show_markers"]);
         markersEntry.Add(new ContextMenuItemEntry(""));
         markersEntry.Add(_options["show_marker_names"]);
         markersEntry.Add(_options["show_marker_icons"]);
@@ -753,8 +761,8 @@ public class WorldMapGump : ResizableGump
         if (_isFullscreen)
         {
             // Keep the map filling the client window if it gets resized while fullscreen.
-            int targetW = Client.Game.Window.ClientBounds.Width;
-            int targetH = Client.Game.Window.ClientBounds.Height;
+            int targetW = ScaleHelper.LogicalWindowWidth;
+            int targetH = ScaleHelper.LogicalWindowHeight;
 
             if (Width != targetW || Height != targetH || X != 0 || Y != 0)
             {
@@ -3059,7 +3067,13 @@ public class WorldMapGump : ResizableGump
             return false;
         }
 
-        if (_zoomIndex < marker.ZoomIndex && marker.Color == Color.Transparent)
+        // A marker's ZoomIndex is the minimum zoom at which it becomes fully visible;
+        // below that it degrades to a small dot (or is skipped entirely when its color
+        // is transparent). "Always show markers" overrides the gating so markers render
+        // at every zoom level.
+        bool zoomGated = _zoomIndex < marker.ZoomIndex && !_alwaysShowMarkers;
+
+        if (zoomGated && marker.Color == Color.Transparent)
         {
             return false;
         }
@@ -3089,10 +3103,10 @@ public class WorldMapGump : ResizableGump
             return false;
         }
 
-        bool showMarkerName = _showMarkerNames && !string.IsNullOrEmpty(marker.Name) && _zoomIndex > 5;
+        bool showMarkerName = _showMarkerNames && !string.IsNullOrEmpty(marker.Name) && (_zoomIndex > 5 || _alwaysShowMarkers);
         bool drawSingleName = false;
 
-        if (_zoomIndex < marker.ZoomIndex || !_showMarkerIcons || marker.MarkerIcon == null)
+        if (zoomGated || !_showMarkerIcons || marker.MarkerIcon == null)
         {
             batcher.Draw
             (
@@ -3852,6 +3866,11 @@ public class WorldMapGump : ResizableGump
 
         WorldMapPathfinder.FindPathAsync(mapIndex, startX, startY, startZ, destX, destY, 8, path =>
         {
+            // The search runs on a worker thread and can complete after the player has left
+            // the world or this gump has been closed, so the world state may be gone.
+            if (IsDisposed || _world?.Player?.Pathfinder == null)
+                return;
+
             if (path == null || path.Count == 0)
             {
                 if (append)
@@ -3910,6 +3929,17 @@ public class WorldMapGump : ResizableGump
 
             _navStepFailedHandler = (blockX, blockY) =>
             {
+                // The gump can be closed or the player can leave the world between the
+                // step failing and this callback running; nothing to replan then.
+                if (IsDisposed || _world?.Player?.Pathfinder == null)
+                {
+                    _navStepFailedHandler = null;
+                    _navDest = null;
+                    _navPath = null;
+                    _navSegments = 0;
+                    return;
+                }
+
                 // Multi-segment routes can't be locally replanned around a block without
                 // skipping waypoints, so a blocked step clears the entire route.
                 if (_navSegments > 1)
@@ -4109,7 +4139,7 @@ public class WorldMapGump : ResizableGump
 
             X = 0;
             Y = 0;
-            ApplySize(Client.Game.Window.ClientBounds.Width, Client.Game.Window.ClientBounds.Height);
+            ApplySize(ScaleHelper.LogicalWindowWidth, ScaleHelper.LogicalWindowHeight);
         }
         else
         {

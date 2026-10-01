@@ -343,7 +343,13 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 _textboxAccount.ContextMenu = new ContextMenuControl(this);
                 foreach (string acct in accts)
                 {
-                    _textboxAccount.ContextMenu.Add(new ContextMenuItemEntry(acct, () => { _textboxAccount.SetText(acct); }));
+                    _textboxAccount.ContextMenu.Add(new ContextMenuItemEntry(acct, () =>
+                    {
+                        _textboxAccount.SetText(acct);
+                        string accountPassword = SimpleAccountManager.GetAccountPassword(acct);
+                        if (accountPassword != null)
+                            _passwordFake.RealText = Crypter.Decrypt(accountPassword);
+                    }));
                 }
                 _textboxAccount.SetTooltip(TazLang.Get("accountcontextmenutooltip"));
                 _textboxAccount.MouseUp += (s, e) =>
@@ -400,7 +406,16 @@ namespace ClassicUO.Game.UI.Gumps.Login
             loginmusic_checkbox.ValueChanged += (sender, e) =>
             {
                 Settings.GlobalSettings.LoginMusic = loginmusic_checkbox.IsChecked;
-                Client.Game.Audio.UpdateCurrentMusicVolume(true);
+                Client.Game.Audio.UpdateCurrentMusicVolume();
+
+                if (loginmusic_checkbox.IsChecked)
+                {
+                    Client.Game.Audio.PlayMusic(Client.Game.Audio.LoginMusicIndex, false, true);
+                }
+                else
+                {
+                    Client.Game.Audio.StopMusic();
+                }
 
                 login_music.IsVisible = Settings.GlobalSettings.LoginMusic;
             };
@@ -408,7 +423,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
             login_music.ValueChanged += (sender, e) =>
             {
                 Settings.GlobalSettings.LoginMusicVolume = login_music.Value;
-                Client.Game.Audio.UpdateCurrentMusicVolume(true);
+                Client.Game.Audio.UpdateCurrentMusicVolume();
             };
 
 
@@ -420,6 +435,21 @@ namespace ClassicUO.Game.UI.Gumps.Login
             {
                 _textboxAccount.SetKeyboardFocus();
             }
+
+#if DEBUG
+            var loadTimeLabel = new Label
+            (
+                $"Asset load: {Client.Game.UO.FileManager.LoadTime.TotalMilliseconds:F0} ms",
+                false,
+                0x034E,
+                font: 9
+            )
+            {
+                Y = 5
+            };
+            loadTimeLabel.X = 640 - loadTimeLabel.Width - 5;
+            Add(loadTimeLabel);
+#endif
 
             Add
             (
@@ -454,11 +484,12 @@ namespace ClassicUO.Game.UI.Gumps.Login
             var c = new ContextMenuControl(this);
             c.Add(new ContextMenuItemEntry(TazLang.Get("skipserverselectdesc"), () =>
             {
-                Settings.GlobalSettings.SkipServerSelect = !Settings.GlobalSettings.SkipServerSelect;
-                _ = Client.Settings.SetAsync(SettingsScope.Global, Constants.SqlSettings.SKIP_SERVER_SELECTION, Settings.GlobalSettings.SkipServerSelect);
-            }, true, Settings.GlobalSettings.SkipServerSelect));
+                ProfileManager.GlobalSettings.SkipServerSelection = !ProfileManager.GlobalSettings.SkipServerSelection;
+            }, true, ProfileManager.GlobalSettings.SkipServerSelection));
 
             c.Add(new ContextMenuItemEntry(TazLang.Get("editsettings"), OpenEditSettings, true, false));
+
+            c.Add(new ContextMenuItemEntry(TazLang.Get("logingump_loghistory", "Log History"), LogHistoryWindow.Show, true, false));
 
             c.Add(new ContextMenuItemEntry(TazLang.Get("tuowebsite"), () =>
             {

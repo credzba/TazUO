@@ -6,7 +6,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClassicUO.Utility.Logging;
-using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace ClassicUO.Game.Managers
@@ -15,8 +14,8 @@ namespace ClassicUO.Game.Managers
     /// Base class that removes the boilerplate of working with a SQLite database: resolving the data
     /// directory, building the connection string, and serializing access behind a lock. Subclass it,
     /// pass a database file name to the constructor, then use <see cref="WithConnectionAsync{T}"/> /
-    /// <see cref="WithConnectionAsync"/> together with Dapper's connection extension methods
-    /// (<c>ExecuteAsync</c>, <c>QueryAsync</c>, <c>ExecuteScalarAsync</c>, ...) to run SQL.
+    /// <see cref="WithConnectionAsync"/> to run SQL against a freshly opened connection, or the
+    /// <see cref="ExecuteAsync(string)"/> helper for parameter-free statements.
     /// <para>
     /// Each call opens and disposes a short-lived connection while holding a <see cref="SemaphoreSlim"/>,
     /// matching the conventions used by the other SQLite managers in the project.
@@ -27,13 +26,13 @@ namespace ClassicUO.Game.Managers
     /// {
     ///     public MyThingDb() : base("mything.db")
     ///     {
-    ///         WithConnectionAsync(c => c.ExecuteAsync(
-    ///             "CREATE TABLE IF NOT EXISTS things (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
-    ///         )).GetAwaiter().GetResult();
+    ///         ExecuteAsync("CREATE TABLE IF NOT EXISTS things (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    ///             .GetAwaiter().GetResult();
     ///     }
     ///
-    ///     public Task SaveAsync(int id, string name) => WithConnectionAsync(c => c.ExecuteAsync(
-    ///         "INSERT OR REPLACE INTO things (id, name) VALUES (@Id, @Name)", new { Id = id, Name = name }));
+    ///     public Task SaveAsync(int id, string name) => ExecuteAsync(
+    ///         "INSERT OR REPLACE INTO things (id, name) VALUES ($id, $name)",
+    ///         new[] { new SqliteParameter("$id", id), new SqliteParameter("$name", name) });
     /// }
     /// </code>
     /// </example>
@@ -47,6 +46,9 @@ namespace ClassicUO.Game.Managers
         // schema-less constructor is used (subclasses that still hand-roll their own SQL). The generic
         // row helpers (AddOrUpdateAsync/DeleteAsync/GetAsync) require this to be set.
         private readonly SqliteTableSchema? _schema;
+
+        /// <summary>The default directory databases live in when the constructor is not given one.</summary>
+        internal static string DefaultDataDirectory => Path.Combine(CUOEnviroment.ExecutablePath, "Data");
 
         /// <summary>The directory that contains the database file.</summary>
         protected string DataDirectory { get; }
@@ -68,7 +70,7 @@ namespace ClassicUO.Game.Managers
         /// </param>
         protected SqliteDatabase(string dbFileName, string dataDirectory = null)
         {
-            DataDirectory = dataDirectory ?? Path.Combine(CUOEnviroment.ExecutablePath, "Data");
+            DataDirectory = dataDirectory ?? DefaultDataDirectory;
             DatabasePath = Path.Combine(DataDirectory, dbFileName);
 
             if (!Directory.Exists(DataDirectory))
@@ -116,8 +118,8 @@ namespace ClassicUO.Game.Managers
 
         /// <summary>
         /// Runs an operation against a freshly opened connection while holding the database lock, and
-        /// returns its result. The connection is opened and disposed for you. Use this with Dapper's
-        /// connection extension methods for reads (<c>QueryAsync</c>, <c>ExecuteScalarAsync</c>, ...).
+        /// returns its result. The connection is opened and disposed for you. Use this to run reads
+        /// and writes directly against the connection with <see cref="SqliteCommand"/>.
         /// </summary>
         protected async Task<T> WithConnectionAsync<T>(Func<SqliteConnection, Task<T>> operation)
         {
@@ -138,9 +140,9 @@ namespace ClassicUO.Game.Managers
                         {
                             return await OpenAndRunAsync(operation).ConfigureAwait(false);
                         }
-                        catch (SqliteException ex) when (IsCorruptionError(ex) && QuarantineCorruptDatabase(ex))
+                        catch (SqliteException ex) when (IsUnusableDatabaseError(ex) && QuarantineUnusableDatabase(ex))
                         {
-                            // The file was corrupt and has been quarantined; a fresh database will be created
+                            // The file was unusable and has been quarantined; a fresh database will be created
                             // on this retry. Only one retry is attempted - if it fails again the error propagates.
                             return await OpenAndRunAsync(operation).ConfigureAwait(false);
                         }
@@ -161,8 +163,8 @@ namespace ClassicUO.Game.Managers
 
         /// <summary>
         /// Runs an operation against a freshly opened connection while holding the database lock. The
-        /// connection is opened and disposed for you. Use this with Dapper's <c>ExecuteAsync</c> for
-        /// writes/DDL.
+        /// connection is opened and disposed for you. Use this to run writes and DDL directly against
+        /// the connection with <see cref="SqliteCommand"/>.
         /// </summary>
         protected Task WithConnectionAsync(Func<SqliteConnection, Task> operation) =>
             WithConnectionAsync(async connection =>
@@ -176,8 +178,18 @@ namespace ClassicUO.Game.Managers
         /// returning the number of rows affected. For statements the generic row helpers cannot
         /// express, such as one-off data migrations and index creation.
         /// </summary>
-        protected Task<int> ExecuteAsync(string sql) =>
-            WithConnectionAsync(connection => connection.ExecuteAsync(sql));
+        protected Task<int> ExecuteAsync(string sql) => ExecuteAsync(sql, null);
+
+        /// <summary>
+        /// Executes a raw SQL statement with optional named parameters against a fresh connection while
+        /// holding the database lock, returning the number of rows affected.
+        /// </summary>
+        /// <param name="sql">The SQL statement to execute.</param>
+        /// <param name="parameters">
+        /// The <see cref="SqliteParameter"/>s to bind, or <c>null</c> for a parameter-free statement.
+        /// </param>
+        protected Task<int> ExecuteAsync(string sql, IEnumerable<SqliteParameter> parameters) =>
+            WithConnectionAsync(connection => ExecuteNonQueryAsync(connection, sql, parameters));
 
         /// <summary>Opens a fresh connection, configures it for multi-client use, runs the operation, and disposes it.</summary>
         private async Task<T> OpenAndRunAsync<T>(Func<SqliteConnection, Task<T>> operation)
@@ -186,6 +198,32 @@ namespace ClassicUO.Game.Managers
             await connection.OpenAsync().ConfigureAwait(false);
             await ConfigureConnectionAsync(connection).ConfigureAwait(false);
             return await operation(connection).ConfigureAwait(false);
+        }
+
+        /// <summary>Executes a non-query SQL statement (optionally with named parameters) against a connection.</summary>
+        private static async Task<int> ExecuteNonQueryAsync(SqliteConnection connection, string sql, IEnumerable<SqliteParameter> parameters = null)
+        {
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            if (parameters != null)
+                command.Parameters.AddRange(parameters);
+
+            return await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>Reads the first column of every row returned by a query as strings (e.g. pragma results).</summary>
+        private static async Task<List<string>> QueryStringsAsync(SqliteConnection connection, string sql)
+        {
+            List<string> results = new();
+
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+            while (await reader.ReadAsync().ConfigureAwait(false))
+                results.Add(reader.GetString(0));
+
+            return results;
         }
 
         /// <summary>
@@ -202,7 +240,7 @@ namespace ClassicUO.Game.Managers
         /// overhead.</item>
         /// </list>
         /// </summary>
-        private static Task ConfigureConnectionAsync(SqliteConnection connection) => connection.ExecuteAsync(
+        private static Task ConfigureConnectionAsync(SqliteConnection connection) => ExecuteNonQueryAsync(connection,
             $"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
 
         /// <summary>
@@ -258,12 +296,12 @@ namespace ClassicUO.Game.Managers
 
             createSql.Append(')');
 
-            await connection.ExecuteAsync(createSql.ToString()).ConfigureAwait(false);
+            await ExecuteNonQueryAsync(connection, createSql.ToString()).ConfigureAwait(false);
 
             // Reconcile columns against the schema using the pragma_table_info table-valued function,
-            // so the existing-column read goes through Dapper rather than a hand-rolled data reader loop.
-            List<string> existingColumns = (await connection.QueryAsync<string>(
-                $"SELECT name FROM pragma_table_info({QuoteLiteral(schema.Name)})").ConfigureAwait(false)).ToList();
+            // so the existing-column read uses a simple reader loop.
+            List<string> existingColumns = await QueryStringsAsync(connection,
+                $"SELECT name FROM pragma_table_info({QuoteLiteral(schema.Name)})").ConfigureAwait(false);
 
             HashSet<string> existingSet = new(existingColumns, StringComparer.OrdinalIgnoreCase);
             HashSet<string> desiredSet = new(StringComparer.OrdinalIgnoreCase);
@@ -278,7 +316,7 @@ namespace ClassicUO.Game.Managers
                 try
                 {
                     // A primary key cannot be added via ALTER TABLE, so never inline it here.
-                    await connection.ExecuteAsync(
+                    await ExecuteNonQueryAsync(connection,
                         $"ALTER TABLE {QuoteIdentifier(schema.Name)} ADD COLUMN {column.ToDefinition(includePrimaryKey: false)}"
                     ).ConfigureAwait(false);
                 }
@@ -297,7 +335,7 @@ namespace ClassicUO.Game.Managers
 
                 try
                 {
-                    await connection.ExecuteAsync(
+                    await ExecuteNonQueryAsync(connection,
                         $"ALTER TABLE {QuoteIdentifier(schema.Name)} DROP COLUMN {QuoteIdentifier(existingColumn)}"
                     ).ConfigureAwait(false);
                 }
@@ -336,7 +374,7 @@ namespace ClassicUO.Game.Managers
 
             List<string> primaryKeys = PrimaryKeyColumns(schema);
 
-            DynamicParameters parameters = new();
+            SqliteParams parameters = new();
             StringBuilder sql = new();
             sql.Append("INSERT INTO ").Append(QuoteIdentifier(schema.Name)).Append(" (");
 
@@ -401,7 +439,7 @@ namespace ClassicUO.Game.Managers
                 }
             }
 
-            return WithConnectionAsync(connection => connection.ExecuteAsync(sql.ToString(), parameters));
+            return WithConnectionAsync(connection => ExecuteNonQueryAsync(connection, sql.ToString(), parameters));
         }
 
         /// <summary>
@@ -419,10 +457,10 @@ namespace ClassicUO.Game.Managers
                     "A delete requires at least one filter column; pass the row's key to identify what to delete.",
                     nameof(filter));
 
-            (string where, DynamicParameters parameters) = BuildWhere(filter);
+            (string where, SqliteParams parameters) = BuildWhere(filter);
             string sql = $"DELETE FROM {QuoteIdentifier(schema.Name)} WHERE {where}";
 
-            return WithConnectionAsync(connection => connection.ExecuteAsync(sql, parameters));
+            return WithConnectionAsync(connection => ExecuteNonQueryAsync(connection, sql, parameters));
         }
 
         /// <summary>
@@ -438,22 +476,37 @@ namespace ClassicUO.Game.Managers
             StringBuilder sql = new();
             sql.Append("SELECT * FROM ").Append(QuoteIdentifier(schema.Name));
 
-            DynamicParameters parameters = null;
+            SqliteParams parameters = null;
             if (filter.Count > 0)
             {
-                (string where, DynamicParameters whereParams) = BuildWhere(filter);
+                (string where, SqliteParams whereParams) = BuildWhere(filter);
                 sql.Append(" WHERE ").Append(where);
                 parameters = whereParams;
             }
 
-            IEnumerable<dynamic> rows = await WithConnectionAsync(connection =>
-                connection.QueryAsync(sql.ToString(), parameters)).ConfigureAwait(false);
+            List<SqliteRow> rows = await WithConnectionAsync(async connection =>
+            {
+                await using SqliteCommand command = connection.CreateCommand();
+                command.CommandText = sql.ToString();
+                if (parameters != null)
+                    command.Parameters.AddRange(parameters);
 
-            List<SqliteRow> results = new();
-            foreach (IDictionary<string, object> row in rows)
-                results.Add(SqliteRow.FromValues(row));
+                await using SqliteDataReader reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
 
-            return results;
+                List<SqliteRow> results = new();
+                while (await reader.ReadAsync().ConfigureAwait(false))
+                {
+                    IDictionary<string, object> values = new Dictionary<string, object>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < reader.FieldCount; i++)
+                        values[reader.GetName(i)] = reader.GetValue(i);
+
+                    results.Add(SqliteRow.FromValues(values));
+                }
+
+                return results;
+            }).ConfigureAwait(false);
+
+            return rows;
         }
 
         /// <summary>
@@ -493,10 +546,10 @@ namespace ClassicUO.Game.Managers
         /// Builds a parameterized WHERE fragment matching each column in <paramref name="filter"/> for
         /// equality (a NULL value becomes <c>IS NULL</c>), combined with AND.
         /// </summary>
-        private static (string sql, DynamicParameters parameters) BuildWhere(SqliteRow filter)
+        private static (string sql, SqliteParams parameters) BuildWhere(SqliteRow filter)
         {
             StringBuilder sql = new();
-            DynamicParameters parameters = new();
+            SqliteParams parameters = new();
 
             int i = 0;
             foreach (string column in filter.Columns)
@@ -542,12 +595,14 @@ namespace ClassicUO.Game.Managers
         private static string QuoteLiteral(string value) => "'" + value.Replace("'", "''") + "'";
 
         /// <summary>
-        /// Returns true if the exception indicates the database file itself is corrupt/unreadable
-        /// (a malformed schema or a file that is not a database) rather than a transient or usage error.
-        /// These are the only conditions that quarantining and recreating the file can recover from.
+        /// Returns true if the exception means the database file itself cannot be used - it is corrupt,
+        /// not a database, or cannot be opened (SQLITE_CANTOPEN) - rather than a transient or usage
+        /// error. These are the conditions that quarantining and recreating the file can recover from; a
+        /// file that cannot be opened because its directory is unwritable simply fails the quarantine
+        /// move, letting the original error propagate.
         /// </summary>
-        private static bool IsCorruptionError(SqliteException ex) =>
-            ex.SqliteErrorCode == SQLITE_CORRUPT || ex.SqliteErrorCode == SQLITE_NOTADB;
+        private static bool IsUnusableDatabaseError(SqliteException ex) =>
+            ex.SqliteErrorCode == SQLITE_CORRUPT || ex.SqliteErrorCode == SQLITE_NOTADB || ex.SqliteErrorCode == SQLITE_CANTOPEN;
 
         /// <summary>
         /// Returns true if the exception is transient lock contention from another client holding the
@@ -576,13 +631,16 @@ namespace ClassicUO.Game.Managers
 
         // SQLite primary result codes (see https://www.sqlite.org/rescode.html). A malformed database
         // schema, "database disk image is malformed" all report SQLITE_CORRUPT (11); a file whose header
-        // is not recognizable as a SQLite database reports SQLITE_NOTADB (26). SQLITE_BUSY (5) and
-        // SQLITE_LOCKED (6) are lock contention; a duplicate/missing column on ALTER reports the generic
-        // SQLITE_ERROR (1).
+        // is not recognizable as a SQLite database reports SQLITE_NOTADB (26). SQLITE_CANTOPEN (14),
+        // "unable to open database file", is surfaced when a file (or a WAL/journal sidecar) cannot be
+        // opened or created - e.g. the file's place is taken by a directory, or the containing directory
+        // is not writable. SQLITE_BUSY (5) and SQLITE_LOCKED (6) are lock contention; a duplicate/missing
+        // column on ALTER reports the generic SQLITE_ERROR (1).
         private const int SQLITE_ERROR = 1;
         private const int SQLITE_BUSY = 5;
         private const int SQLITE_LOCKED = 6;
         private const int SQLITE_CORRUPT = 11;
+        private const int SQLITE_CANTOPEN = 14;
         private const int SQLITE_NOTADB = 26;
 
         // How long a connection waits for a lock another client holds before giving up (SQLITE_BUSY), and
@@ -592,13 +650,14 @@ namespace ClassicUO.Game.Managers
         private const int BUSY_RETRY_BASE_DELAY_MS = 50;
 
         /// <summary>
-        /// Moves a corrupt database file (and its WAL/SHM/journal sidecars) aside so a fresh, empty
-        /// database can be created in its place, letting the client keep running instead of crashing on
-        /// startup. The corrupt copy is preserved with a <c>.corrupt</c> suffix for later inspection.
-        /// Returns true only if the primary file was successfully moved out of the way, meaning the
-        /// caller can safely retry the operation against a clean database.
+        /// Moves an unusable database file (corrupt, not a database, or one that cannot be opened - and
+        /// its WAL/SHM/journal sidecars) aside so a fresh, empty database can be created in its place,
+        /// letting the client keep running instead of crashing on startup. The bad copy is preserved with
+        /// a <c>.corrupt</c> suffix for later inspection. Returns true only if the primary file was
+        /// successfully moved out of the way, meaning the caller can safely retry the operation against a
+        /// clean database.
         /// </summary>
-        private bool QuarantineCorruptDatabase(SqliteException ex)
+        private bool QuarantineUnusableDatabase(SqliteException ex)
         {
             try
             {
@@ -618,14 +677,14 @@ namespace ClassicUO.Game.Managers
                 TryDelete(DatabasePath + "-shm");
                 TryDelete(DatabasePath + "-journal");
 
-                Log.Warn($"Corrupt SQLite database '{DatabasePath}' detected ({ex.Message.Trim()}). " +
+                Log.Warn($"Unusable SQLite database '{DatabasePath}' detected ({ex.Message.Trim()}). " +
                          $"Moved it to '{quarantinePath}' and recreating an empty database.");
 
                 return !File.Exists(DatabasePath);
             }
             catch (Exception cleanupEx)
             {
-                Log.Error($"Failed to quarantine corrupt SQLite database '{DatabasePath}': {cleanupEx.Message}");
+                Log.Error($"Failed to quarantine unusable SQLite database '{DatabasePath}': {cleanupEx.Message}");
                 return false;
             }
         }
@@ -678,6 +737,17 @@ namespace ClassicUO.Game.Managers
         {
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name);
+        }
+
+        /// <summary>
+        /// An ordered collection of named parameters bound to a command. Names are unprefixed;
+        /// the leading <c>@</c> is added here so callers stay consistent with the parameter tokens
+        /// generated in the SQL they build.
+        /// </summary>
+        private sealed class SqliteParams : List<SqliteParameter>
+        {
+            public void Add(string name, object value) =>
+                Add(new SqliteParameter("@" + name, value ?? DBNull.Value));
         }
 
         /// <summary>Releases resources used by the database.</summary>

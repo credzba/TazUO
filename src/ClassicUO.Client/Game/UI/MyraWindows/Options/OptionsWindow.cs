@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using ClassicUO.Common;
 using ClassicUO.Configuration;
 using ClassicUO.Game.Managers;
+using ClassicUO.Game.ScreenDecorations.Manager;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Game.UI.MyraWindows.Options.Tabs;
 using ClassicUO.Game.UI.MyraWindows.Widgets;
@@ -458,6 +459,29 @@ public class OptionsWindow : MyraControl
         return tabButton;
     }
 
+    // Presets change several settings at once; recreate the visible controls from
+    // their accessors so the values on screen agree with the applied profile.
+    internal void RefreshCurrentContent()
+    {
+        if (!string.IsNullOrWhiteSpace(_searchField.Text))
+        {
+            ApplySearch(_searchField.Text.Trim());
+            return;
+        }
+
+        if (_optionSources.TryGetValue(_lastCategory, out List<IOptionSource>? sources))
+        {
+            for (int i = 0; i < sources.Count; i++)
+            {
+                // Rebuilding the category would reset nested tabs to their first page.
+                if (_optionsPanel.Widgets[i] is MyraTabControl tabs)
+                    tabs.RefreshSelectedContent();
+                else
+                    _optionsPanel.Widgets[i] = sources[i].Render();
+            }
+        }
+    }
+
     private void ShowPage(string category)
     {
         if (_lastCategory == category)
@@ -480,6 +504,17 @@ public class OptionsWindow : MyraControl
             _optionsPanel.Widgets.Add(source.Render());
 
         SelectedCategoryChanged?.Invoke(this, category);
+    }
+
+    /// <summary>
+    ///     Ends any effect preview started from the Visual Effects tab. The preview exists to be
+    ///     looked at while tuning; nothing outside this window can turn it off, so leaving it running
+    ///     would strand an overlay on screen with no visible control for it.
+    /// </summary>
+    public override void Dispose()
+    {
+        ScreenOverlayManager.Instance.ClearPreview();
+        base.Dispose();
     }
 
     #region Static Methods

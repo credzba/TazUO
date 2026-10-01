@@ -1,11 +1,13 @@
 ﻿// SPDX-License-Identifier: BSD-2-Clause
 
+using ClassicUO.Assets;
 using ClassicUO.Configuration;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.UI.Gumps;
 using ClassicUO.Input;
 using ClassicUO.Renderer;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 
@@ -96,6 +98,15 @@ namespace ClassicUO.Game.UI.Controls
         public string Text;
         public bool HasSegments => SegmentAction != null && SegmentLabels != null && SegmentLabels.Length > 0;
 
+        /// <summary>When false, the entry is omitted from the menu; lets a caller hide an entry whose action does not currently apply.</summary>
+        public bool IsVisible = true;
+
+        /// <summary>When non-zero, the entry renders an art icon of this graphic to the left of its text.</summary>
+        public ushort ArtGraphic;
+
+        /// <summary>When true, <see cref="Text"/> is rendered as HTML (color and font tags are interpreted).</summary>
+        public bool IsHtml;
+
         public void Add(ContextMenuItemEntry subEntry) => Items.Add(subEntry);
     }
 
@@ -134,12 +145,15 @@ namespace ClassicUO.Game.UI.Controls
 
             for (int i = 0; i < list.Count; i++)
             {
-                var item = new ContextMenuItem(this, list[i], _scale);
-
-                if (i > 0)
+                if (!list[i].IsVisible)
                 {
-                    item.Y = y;
+                    continue;
                 }
+
+                var item = new ContextMenuItem(this, list[i], _scale)
+                {
+                    Y = y
+                };
 
                 if (_background.Width < item.Width)
                 {
@@ -371,6 +385,55 @@ namespace ClassicUO.Game.UI.Controls
             return false;
         }
 
+        private class ContextMenuArtIcon : Control
+        {
+            private readonly Texture2D _texture;
+            private readonly Rectangle _source;
+
+            public ContextMenuArtIcon(ushort graphic)
+            {
+                AcceptMouseInput = false;
+
+                ref readonly SpriteInfo art = ref Client.Game.UO.Arts.GetArt(graphic);
+                if (art.Texture == null)
+                {
+                    Dispose();
+                    return;
+                }
+
+                _texture = art.Texture;
+
+                Rectangle bounds = Client.Game.UO.Arts.GetRealArtBounds(graphic);
+                Rectangle uv = art.UV;
+                _source = new Rectangle(uv.X + bounds.X, uv.Y + bounds.Y, bounds.Width, bounds.Height);
+            }
+
+            public override bool Draw(UltimaBatcher2D batcher, int x, int y)
+            {
+                if (IsDisposed || _texture == null || _source.Width <= 0 || _source.Height <= 0)
+                    return false;
+
+                int maxWidth = Width - 4;
+                int maxHeight = Height - 4;
+
+                if (maxWidth <= 0 || maxHeight <= 0)
+                    return false;
+
+                float scale = Math.Min((float)maxWidth / _source.Width, (float)maxHeight / _source.Height);
+                int drawWidth = Math.Max(1, (int)(_source.Width * scale));
+                int drawHeight = Math.Max(1, (int)(_source.Height * scale));
+
+                batcher.Draw(
+                    _texture,
+                    new Rectangle(x + ((Width - drawWidth) >> 1), y + ((Height - drawHeight) >> 1), drawWidth, drawHeight),
+                    _source,
+                    ShaderHueTranslator.GetHueVector(0)
+                );
+
+                return true;
+            }
+        }
+
         private class ContextMenuItem : Control
         {
             private static readonly RenderedText _moreMenuLabel = RenderedText.Create(">", 0xFFFF, isunicode: true, style: FontStyle.BlackBorder);
@@ -404,7 +467,8 @@ namespace ClassicUO.Game.UI.Controls
                     true,
                     0xFFFF,
                     0,
-                    style: FontStyle.BlackBorder
+                    style: FontStyle.BlackBorder,
+                    ishtml: entry.IsHtml
                 )
                 {
                     X = 25
@@ -434,6 +498,23 @@ namespace ClassicUO.Game.UI.Controls
                 {
                     //_label.X = _selectedPic.X + _selectedPic.Width + 6;
                     _selectedPic.Y = (Height >> 1) - (_selectedPic.Height >> 1);
+                }
+
+                if (_entry.ArtGraphic != 0)
+                {
+                    // Render an item art icon before the label; push the label out so it
+                    // never overlaps the icon.
+                    var icon = new ContextMenuArtIcon(_entry.ArtGraphic)
+                    {
+                        X = _label.X,
+                        Y = 0,
+                        Width = ScaleHelper.Scaled(26, _scale),
+                        Height = Height
+                    };
+
+                    Add(icon);
+
+                    _label.X += icon.Width + ScaleHelper.Scaled(4, _scale);
                 }
 
                 Width = _label.X + _label.Width + ScaleHelper.Scaled(25, _scale);

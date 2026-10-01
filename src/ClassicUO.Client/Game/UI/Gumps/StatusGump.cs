@@ -12,6 +12,18 @@ using Microsoft.Xna.Framework;
 
 namespace ClassicUO.Game.UI.Gumps
 {
+    /// <summary>Selectable status gump layout</summary>
+    public enum StatusGumpStyle
+    {
+        Standard,
+        Old,
+        ModernVertical,
+        ModernHorizontal,
+        Compact,
+        CompactHorizontal,
+        ModernHorizontalBars
+    }
+
     public abstract class StatusGumpBase : ScalableGump
     {
         protected const ushort LOCK_UP_GRAPHIC = 0x0984;
@@ -133,13 +145,29 @@ namespace ClassicUO.Game.UI.Gumps
         {
             StatusGumpBase gump;
 
-            if (ProfileManager.CurrentProfile.UseOldStatusGump)
+            switch (ProfileManager.CurrentProfile.StatusGumpStyle)
             {
-                gump = UIManager.GetGump<StatusGumpOld>();
-            }
-            else
-            {
-                gump = UIManager.GetGump<StatusGumpCredzba>();
+                case StatusGumpStyle.Old:
+                    gump = UIManager.GetGump<StatusGumpOld>();
+                    break;
+                case StatusGumpStyle.ModernVertical:
+                    gump = UIManager.GetGump<StatusGumpModernVertical>();
+                    break;
+                case StatusGumpStyle.ModernHorizontal:
+                    gump = UIManager.GetGump<StatusGumpModernHorizontal>();
+                    break;
+                case StatusGumpStyle.Compact:
+                    gump = UIManager.GetGump<StatusGumpCompact>();
+                    break;
+                case StatusGumpStyle.CompactHorizontal:
+                    gump = UIManager.GetGump<StatusGumpCompactHorizontal>();
+                    break;
+                case StatusGumpStyle.ModernHorizontalBars:
+                    gump = UIManager.GetGump<StatusGumpModernHorizontalBars>();
+                    break;
+                default:
+                    gump = UIManager.GetGump<StatusGumpCredzba>();
+                    break;
             }
             return gump;
         }
@@ -148,9 +176,29 @@ namespace ClassicUO.Game.UI.Gumps
         {
             StatusGumpBase gump;
 
-            if (Client.Game.UO.Version < ClientVersion.CV_308Z || ProfileManager.CurrentProfile.UseOldStatusGump)
+            if (Client.Game.UO.Version < ClientVersion.CV_308Z || ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.Old)
             {
                 gump = new StatusGumpOld(world);
+            }
+            else if (ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.ModernVertical)
+            {
+                gump = new StatusGumpModernVertical(world);
+            }
+            else if (ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.ModernHorizontal)
+            {
+                gump = new StatusGumpModernHorizontal(world);
+            }
+            else if (ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.Compact)
+            {
+                gump = new StatusGumpCompact(world);
+            }
+            else if (ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.CompactHorizontal)
+            {
+                gump = new StatusGumpCompactHorizontal(world);
+            }
+            else if (ProfileManager.CurrentProfile.StatusGumpStyle == StatusGumpStyle.ModernHorizontalBars)
+            {
+                gump = new StatusGumpModernHorizontalBars(world);
             }
             else
             {
@@ -160,7 +208,34 @@ namespace ClassicUO.Game.UI.Gumps
             gump.X = x;
             gump.Y = y;
 
+            // The position is applied after construction, so a SetInScreen inside a constructor is a no-op.
+            // Clamp here so a stale/off-screen saved position (e.g. from a resolution change) stays reachable.
+            gump.SetInScreen();
+
             return gump;
+        }
+
+        /// <summary>
+        /// Replaces the currently open status gump with the style selected in the profile,
+        /// preserving its position. No-op when no status gump is open.
+        /// </summary>
+        public static void ReplaceStatusGump()
+        {
+            StatusGumpBase current = UIManager.GetGump<StatusGumpOld>();
+            current ??= UIManager.GetGump<StatusGumpModernVertical>();
+            current ??= UIManager.GetGump<StatusGumpModernHorizontal>();
+            current ??= UIManager.GetGump<StatusGumpModern>();
+            current ??= UIManager.GetGump<StatusGumpCompact>();
+            current ??= UIManager.GetGump<StatusGumpCompactHorizontal>();
+            current ??= UIManager.GetGump<StatusGumpModernHorizontalBars>();
+            if (current == null)
+                return;
+
+            Point position = current.Location;
+            World world = current.World;
+
+            current.Dispose();
+            UIManager.Add(AddStatusGump(world, position.X, position.Y));
         }
 
         protected static ushort GetStatLockGraphic(Lock lockStatus)
@@ -554,32 +629,18 @@ namespace ClassicUO.Game.UI.Gumps
 
             base.Update();
         }
-
-
-        private enum MobileStats
-        {
-            Name,
-            Strength,
-            Dexterity,
-            Intelligence,
-            HealthCurrent,
-            StaminaCurrent,
-            ManaCurrent,
-            WeightCurrent,
-            Gold,
-            AR,
-            Sex,
-            NumStats
-        }
     }
 
     public class StatusGumpModern : StatusGumpBase
     {
+        private bool useExtendedStatus{ get; init; }
+
         public StatusGumpModern(World world) : base(world)
         {
             Point p = Point.Zero;
             int xOffset = 0;
             _labels = new Label[(int)MobileStats.NumStats];
+            useExtendedStatus = Client.Game.UO.Version >= ClientVersion.CV_70300;
 
             Add(new GumpPic(0, 0, Settings.Graphic_Background, Settings.Hue_Background));
 
@@ -593,7 +654,7 @@ namespace ClassicUO.Game.UI.Gumps
                 (
                     !string.IsNullOrEmpty(World.Player.Name) ? World.Player.Name : string.Empty,
                     MobileStats.Name,
-                    Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 90 : 58,
+                    useExtendedStatus ? 90 : 58,
                     50,
                     320,
                     Settings.Hue_CharacterName,
@@ -615,7 +676,7 @@ namespace ClassicUO.Game.UI.Gumps
                 }
 
                 Lock status = World.Player.StrLock;
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 28 : 40;
+                xOffset = useExtendedStatus ? 28 : 40;
                 ushort gumpID = GetStatLockGraphic(status);
 
                 Add(_lockers[0] = new GumpPic(xOffset, 76, gumpID, 0));
@@ -636,7 +697,7 @@ namespace ClassicUO.Game.UI.Gumps
                 //    ButtonAction = ButtonAction.Activate,
                 //});
                 status = World.Player.DexLock;
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 28 : 40;
+                xOffset = useExtendedStatus ? 28 : 40;
                 gumpID = GetStatLockGraphic(status);
 
                 Add(_lockers[1] = new GumpPic(xOffset, 102, gumpID, 0));
@@ -657,7 +718,7 @@ namespace ClassicUO.Game.UI.Gumps
                 //    ButtonAction = ButtonAction.Activate
                 //});
                 status = World.Player.IntLock;
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 28 : 40;
+                xOffset = useExtendedStatus ? 28 : 40;
                 gumpID = GetStatLockGraphic(status);
 
                 Add(_lockers[2] = new GumpPic(xOffset, 132, gumpID, 0));
@@ -677,7 +738,7 @@ namespace ClassicUO.Game.UI.Gumps
                 //    ButtonAction = ButtonAction.Activate
                 //});
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     xOffset = 80;
                     AddStatTextLabel(World.Player.HitChanceIncrease.ToString(), MobileStats.HitChanceInc, xOffset, 161);
@@ -751,7 +812,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 int textWidth = 40;
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     xOffset = 150;
 
@@ -919,7 +980,7 @@ namespace ClassicUO.Game.UI.Gumps
                     { CanMove = true }
                 );
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     xOffset = 240;
 
@@ -959,7 +1020,7 @@ namespace ClassicUO.Game.UI.Gumps
                     alignment: TEXT_ALIGN_TYPE.TS_CENTER
                 );
 
-                int lineX = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 236 : 216;
+                int lineX = useExtendedStatus ? 236 : 216;
 
                 Add
                 (
@@ -967,7 +1028,7 @@ namespace ClassicUO.Game.UI.Gumps
                     (
                         lineX,
                         138,
-                        Math.Abs(lineX - (Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 270 : 250)),
+                        Math.Abs(lineX - (useExtendedStatus ? 270 : 250)),
                         1,
                         0xFF383838
                     )
@@ -983,7 +1044,7 @@ namespace ClassicUO.Game.UI.Gumps
                     alignment: TEXT_ALIGN_TYPE.TS_CENTER
                 );
 
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 205 : 188;
+                xOffset = useExtendedStatus ? 205 : 188;
 
                 Add
                 (
@@ -1027,7 +1088,7 @@ namespace ClassicUO.Game.UI.Gumps
                     { CanMove = true }
                 );
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     xOffset = 320;
 
@@ -1088,7 +1149,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 AddStatTextLabel($"{World.Player.Followers}-{World.Player.FollowersMax}", MobileStats.Followers, xOffset, 133);
 
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 285 : 260;
+                xOffset = useExtendedStatus ? 285 : 260;
 
                 Add
                 (
@@ -1118,7 +1179,7 @@ namespace ClassicUO.Game.UI.Gumps
                     { CanMove = true }
                 );
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     xOffset = 400;
 
@@ -1230,7 +1291,7 @@ namespace ClassicUO.Game.UI.Gumps
                 }
 
 
-                xOffset = Client.Game.UO.FileManager.Gumps.UseUOPGumps ? 445 : 334;
+                xOffset = useExtendedStatus ? 445 : 334;
 
                 Add
                 (
@@ -1358,7 +1419,7 @@ namespace ClassicUO.Game.UI.Gumps
                 }
             }
 
-            if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+            if (useExtendedStatus)
             {
                 p.X = 540;
                 p.Y = 180;
@@ -1444,7 +1505,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 _labels[(int)MobileStats.Name].Text = !string.IsNullOrEmpty(World.Player.Name) ? World.Player.Name : string.Empty;
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     _labels[(int)MobileStats.HitChanceInc].Text = World.Player.HitChanceIncrease.ToString();
                 }
@@ -1455,7 +1516,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 _labels[(int)MobileStats.Intelligence].Text = World.Player.Intelligence.ToString();
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     _labels[(int)MobileStats.DefenseChanceInc].Text = $"{World.Player.DefenseChanceIncrease}/{World.Player.MaxDefenseChanceIncrease}";
                 }
@@ -1472,7 +1533,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 _labels[(int)MobileStats.ManaMax].Text = World.Player.ManaMax.ToString();
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     _labels[(int)MobileStats.LowerManaCost].Text = World.Player.LowerManaCost.ToString();
                 }
@@ -1485,7 +1546,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 _labels[(int)MobileStats.WeightMax].Text = World.Player.WeightMax.ToString();
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     _labels[(int)MobileStats.DamageChanceInc].Text = World.Player.DamageIncrease.ToString();
 
@@ -1498,7 +1559,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 _labels[(int)MobileStats.Followers].Text = $"{World.Player.Followers}/{World.Player.FollowersMax}";
 
-                if (Client.Game.UO.FileManager.Gumps.UseUOPGumps)
+                if (useExtendedStatus)
                 {
                     _labels[(int)MobileStats.LowerReagentCost].Text = World.Player.LowerReagentCost.ToString();
 
@@ -1548,43 +1609,6 @@ namespace ClassicUO.Game.UI.Gumps
             public static ushort Hue_Background { get; set; } = 0;
             public static ushort Hue_CharacterName { get; set; } = 0x0386;
             public static ushort Hue_Text { get; set; } = 0x0386;
-        }
-
-        private enum MobileStats
-        {
-            Name,
-            Strength,
-            Dexterity,
-            Intelligence,
-            HealthCurrent,
-            HealthMax,
-            StaminaCurrent,
-            StaminaMax,
-            ManaCurrent,
-            ManaMax,
-            WeightMax,
-            Followers,
-            WeightCurrent,
-            LowerReagentCost,
-            SpellDamageInc,
-            FasterCasting,
-            FasterCastRecovery,
-            StatCap,
-            HitChanceInc,
-            DefenseChanceInc,
-            LowerManaCost,
-            DamageChanceInc,
-            SwingSpeedInc,
-            Luck,
-            Gold,
-            AR,
-            RF,
-            RC,
-            RP,
-            RE,
-            Damage,
-            Sex,
-            NumStats
         }
     }
 
@@ -1673,5 +1697,45 @@ namespace ClassicUO.Game.UI.Gumps
 
             return max;
         }
+    }
+
+    /// <summary>
+    /// Identifies the player stats the status gumps display, used to index per-stat label arrays.
+    /// </summary>
+    internal enum MobileStats
+    {
+        Name,
+        Strength,
+        Dexterity,
+        Intelligence,
+        HealthCurrent,
+        HealthMax,
+        StaminaCurrent,
+        StaminaMax,
+        ManaCurrent,
+        ManaMax,
+        WeightMax,
+        Followers,
+        WeightCurrent,
+        LowerReagentCost,
+        SpellDamageInc,
+        FasterCasting,
+        FasterCastRecovery,
+        StatCap,
+        HitChanceInc,
+        DefenseChanceInc,
+        LowerManaCost,
+        DamageChanceInc,
+        SwingSpeedInc,
+        Luck,
+        Gold,
+        AR,
+        RF,
+        RC,
+        RP,
+        RE,
+        Damage,
+        Sex,
+        NumStats
     }
 }

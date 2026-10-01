@@ -377,6 +377,14 @@ namespace ClassicUO.Game.Scenes
 
         internal override bool OnMouseDown(MouseButtonType button)
         {
+            // Profile is unloaded as the scene tears down, but the SDL save-conflict prompt shown during the
+            // final settings save keeps pumping mouse events back in. Nothing here is actionable without a
+            // profile, so bail rather than dereference it.
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return false;
+            }
+
             switch (button)
             {
                 case MouseButtonType.Left:
@@ -394,6 +402,11 @@ namespace ClassicUO.Game.Scenes
 
         internal override bool OnMouseUp(MouseButtonType button)
         {
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return false;
+            }
+
             switch (button)
             {
                 case MouseButtonType.Left:
@@ -411,6 +424,11 @@ namespace ClassicUO.Game.Scenes
 
         internal override bool OnMouseDoubleClick(MouseButtonType button)
         {
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return false;
+            }
+
             switch (button)
             {
                 case MouseButtonType.Left:
@@ -685,7 +703,6 @@ namespace ClassicUO.Game.Scenes
                     case CursorTarget.Object:
                     case CursorTarget.MultiPlacement when _world.CustomHouseManager == null:
                     case CursorTarget.CallbackTarget:
-
                         {
                             BaseGameObject obj = lastObj;
 
@@ -1195,6 +1212,11 @@ namespace ClassicUO.Game.Scenes
 
         internal override bool OnMouseWheel(bool up)
         {
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return false;
+            }
+
             if (HotKeys.IsPressed(HotKeyRegistrar.ItemDragLockId) && Client.Game.UO.GameCursor.ItemHold.Enabled)
             {
                 if (!up && !Client.Game.UO.GameCursor.ItemHold.IsFixedPosition)
@@ -1259,6 +1281,11 @@ namespace ClassicUO.Game.Scenes
 
         internal override bool OnMouseDragging()
         {
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return false;
+            }
+
             if (!UIManager.IsMouseOverWorld)
             {
                 return false;
@@ -1353,6 +1380,14 @@ namespace ClassicUO.Game.Scenes
 
         internal override void OnKeyDown(SDL.SDL_KeyboardEvent e)
         {
+            // The profile is unloaded while the scene tears down, but the SDL save-conflict prompt shown
+            // during the final settings save keeps pumping key events back into this scene. Nothing here
+            // is actionable without a profile, so bail rather than dereference it.
+            if (ProfileManager.CurrentProfile == null)
+            {
+                return;
+            }
+
             var key = (SDL.SDL_Keycode)e.key;
 
             if (key == SDL.SDL_Keycode.SDLK_TAB && e.repeat)
@@ -1567,22 +1602,32 @@ namespace ClassicUO.Game.Scenes
                 }
                 else
                 {
-                    if (string.IsNullOrEmpty(UIManager.SystemChat.TextBoxControl.Text))
+                    if (string.IsNullOrEmpty(UIManager.SystemChat.TextBoxControl.Text) && ProfileManager.CurrentProfile != null && ProfileManager.GlobalSettings != null)
                     {
-                        bool wasd = ProfileManager.CurrentProfile.UseWASDInsteadArrowKeys && !UIManager.SystemChat.IsActive;
+                        bool wasd = ProfileManager.GlobalSettings.UseWASDInsteadArrowKeys && !UIManager.SystemChat.IsActive;
 
                         SDL.SDL_Keycode[] wasdKeys = { SDL.SDL_Keycode.SDLK_W, SDL.SDL_Keycode.SDLK_A, SDL.SDL_Keycode.SDLK_S, SDL.SDL_Keycode.SDLK_D };
                         SDL.SDL_Keycode[] arrowKeys = { SDL.SDL_Keycode.SDLK_UP, SDL.SDL_Keycode.SDLK_LEFT, SDL.SDL_Keycode.SDLK_DOWN, SDL.SDL_Keycode.SDLK_RIGHT };
 
                         SDL.SDL_Keycode[] keys = wasd ? wasdKeys : arrowKeys;
 
-                        for (int i = 0; i < keys.Length; i++)
+                        bool disableArrowKeys = ProfileManager.CurrentProfile.DisableArrowBtn && !wasd;
+
+                        if (!disableArrowKeys)
                         {
-                            if (key == keys[i])
+                            for (int i = 0; i < keys.Length; i++)
                             {
-                                _flags[i] = true;
-                                break;
+                                if (key == keys[i])
+                                {
+                                    _flags[i] = true;
+                                    break;
+                                }
                             }
+                        }
+
+                        if (!ProfileManager.CurrentProfile.DisableArrowBtn)
+                        {
+                            SetNumpadMovementFlags(key, true);
                         }
                     }
                 }
@@ -1596,7 +1641,9 @@ namespace ClassicUO.Game.Scenes
 
         internal override void OnKeyUp(SDL.SDL_KeyboardEvent e)
         {
-            if (!_world.InGame)
+            // The profile is unloaded while the scene tears down, but SDL keeps pumping key events
+            // back into this scene; bail before the profile is dereferenced below.
+            if (!_world.InGame || ProfileManager.CurrentProfile == null)
             {
                 return;
             }
@@ -1702,21 +1749,27 @@ namespace ClassicUO.Game.Scenes
                 }
             }
 
-            bool wasd = ProfileManager.CurrentProfile.UseWASDInsteadArrowKeys && !UIManager.SystemChat.IsActive;
+            bool wasd = ProfileManager.GlobalSettings.UseWASDInsteadArrowKeys && !UIManager.SystemChat.IsActive;
 
             SDL.SDL_Keycode[] wasdKeys = { SDL.SDL_Keycode.SDLK_W, SDL.SDL_Keycode.SDLK_A, SDL.SDL_Keycode.SDLK_S, SDL.SDL_Keycode.SDLK_D };
             SDL.SDL_Keycode[] arrowKeys = { SDL.SDL_Keycode.SDLK_UP, SDL.SDL_Keycode.SDLK_LEFT, SDL.SDL_Keycode.SDLK_DOWN, SDL.SDL_Keycode.SDLK_RIGHT };
 
             SDL.SDL_Keycode[] keys = wasd ? wasdKeys : arrowKeys;
 
-            for (int i = 0; i < keys.Length; i++)
-            {
-                if (key == keys[i])
+            bool disableArrowKeys = ProfileManager.CurrentProfile.DisableArrowBtn && !wasd;
+
+            if (!disableArrowKeys)
+                for (int i = 0; i < keys.Length; i++)
                 {
-                    _flags[i] = false;
-                    break;
+                    if (key == keys[i])
+                    {
+                        _flags[i] = false;
+                        break;
+                    }
                 }
-            }
+
+            if (!ProfileManager.CurrentProfile.DisableArrowBtn)
+                SetNumpadMovementFlags(key, false);
 
             if (
                 key == SDL.SDL_Keycode.SDLK_TAB
@@ -1763,6 +1816,41 @@ namespace ClassicUO.Game.Scenes
                         ExecuteMacro(mac);
                     }
                 }
+            }
+        }
+
+        private void SetNumpadMovementFlags(SDL.SDL_Keycode key, bool pressed)
+        {
+            switch (key)
+            {
+                case SDL.SDL_Keycode.SDLK_KP_8:
+                    _flags[0] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_2:
+                    _flags[2] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_4:
+                    _flags[1] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_6:
+                    _flags[3] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_7:
+                    _flags[0] = pressed;
+                    _flags[1] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_9:
+                    _flags[0] = pressed;
+                    _flags[3] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_1:
+                    _flags[2] = pressed;
+                    _flags[1] = pressed;
+                    break;
+                case SDL.SDL_Keycode.SDLK_KP_3:
+                    _flags[2] = pressed;
+                    _flags[3] = pressed;
+                    break;
             }
         }
 

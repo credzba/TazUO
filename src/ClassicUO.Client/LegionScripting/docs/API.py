@@ -28,6 +28,22 @@ class ApiEntity(ApiGameObject):
         """
         pass
 
+    def Target(self) -> None:
+        """
+         Attempts to target this entity. Only has any effect while the client is waiting for a target selection.
+        
+        """
+        pass
+
+    def TargetRel(self, xOffset: "int", yOffset: "int", tilesOnly: "bool" = True) -> None:
+        """
+         Attempts to target the spot at an offset from this entity's position, resolving it the same way a
+         click would: the topmost visible object there is targeted, whether that is an entity, a static/multi,
+         or land. Only has any effect while the client is waiting for a target selection.
+        
+        """
+        pass
+
 class ApiGameObject:
     ""
     Impassible: bool = None
@@ -206,6 +222,7 @@ class ApiMobile(ApiEntity):
     IsMounted: bool = None
     IsDrivingBoat: bool = None
     IsRunning: bool = None
+    IsParalyzed: bool = None
     Direction: str = None
     Notoriety: Notoriety = None
     InWarMode: bool = None
@@ -710,6 +727,22 @@ class ApiUiGump:
         """
         pass
 
+    def CreateGumpRenderedMapArea(self, mapIndex: "int", mapX: "int", mapY: "int", mapWidth: "int", mapHeight: "int", x: "int", y: "int", width: "int", height: "int") -> "Any":
+        """
+         Create a rendered map area, displaying a region of the world map as a texture.
+         Example:
+         ```py
+         gump = API.CreateGump()
+         gump.SetRect(100, 100, 200, 200)
+        
+         map = API.CreateGumpRenderedMapArea(0, 1000, 1000, 1100, 1100, 0, 0, 200, 200)
+         gump.Add(map)
+         API.AddGump(gump)
+         ```
+        
+        """
+        pass
+
     def LegionTextureControl(self, textureName: "str", width: "int" = 0, height: "int" = 0) -> "Any":
         """
          Create an image control that displays a named PNG texture loaded from a ZIP archive.
@@ -776,7 +809,7 @@ class ApiUiGump:
         """
         pass
 
-    def CreateGumpTextBox(self, text: "str" = "", width: "int" = 200, height: "int" = 30, multiline: "bool" = False) -> "ApiUiTtfTextInputField":
+    def CreateGumpTextBox(self, text: "str" = "", width: "int" = 200, height: "int" = 30, multiline: "bool" = False, fontSize: "float" = 20) -> "ApiUiTtfTextInputField":
         """
          Create a text area control.
          Example:
@@ -1105,6 +1138,10 @@ class ApiUiRadioButton(ApiUiCheckbox):
         """
         pass
 
+class ApiUiRenderedMapArea(ApiUiBaseControl):
+    ""
+    Alpha: float = None
+
 class ApiUiResizableStaticPic(ApiUiBaseControl):
     ""
     Hue: int = None
@@ -1143,6 +1180,7 @@ class ApiUiTiledGumpPic(ApiUiBaseControl):
 class ApiUiTtfTextInputField(ApiUiBaseControl):
     ""
     Text: str = None
+    FontSize: float = None
     CaretIndex: int = None
     NumbersOnly: bool = None
     AcceptKeyboardInput: bool = None
@@ -1247,6 +1285,15 @@ def OnHotKey(key: "str", callback: "Any" = None) -> None:
      ```
      The <paramref name="key"/> can include modifiers (CTRL, SHIFT, ALT),
      for example: "CTRL+SHIFT+F1" or "ALT+A".
+    
+    """
+    pass
+
+def IsKeyPressed(key: "str") -> "bool":
+    """
+     Returns true if the given key combination is currently held down.
+     The key format matches `OnHotKey` , e.g. "CTRL+SHIFT+F1" or "A".
+     Extra modifiers beyond those specified do not prevent a match.
     
     """
     pass
@@ -1415,6 +1462,20 @@ def Contents(serial: "int") -> "int":
      count = API.Contents(API.Backpack)
      if count > 0:
        API.SysMsg(f"You have {count} items in your backpack")
+     ```
+    
+    """
+    pass
+
+def GetSpellsInSpellbook(serial: "int") -> "list[str]":
+    """
+     Get the names of all spells scribed into a spellbook.
+     Example:
+     ```py
+     spells = API.GetSpellsInSpellbook(book_serial)
+     if spells:
+       for spell in spells:
+         API.SysMsg(spell)
      ```
     
     """
@@ -1977,6 +2038,50 @@ def CreateCooldownBar(seconds: "float", text: "str", hue: "int") -> None:
     """
     pass
 
+def UpdateCooldown(name: "str", maxValue: "float" = -1, currentValue: "float" = -1) -> None:
+    """
+     Updates an existing cooldown bar. Only the provided values are applied.
+     Example:
+     ```py
+     API.UpdateCooldown("Healing", maxValue=10, currentValue=5)
+     ```
+    
+    """
+    pass
+
+def RestartCooldown(name: "str") -> None:
+    """
+     Restarts the countdown of an existing cooldown bar to its full duration.
+     Example:
+     ```py
+     API.RestartCooldown("Healing")
+     ```
+    
+    """
+    pass
+
+def DeleteCooldown(name: "str") -> None:
+    """
+     Deletes an existing cooldown bar.
+     Example:
+     ```py
+     API.DeleteCooldown("Healing")
+     ```
+    
+    """
+    pass
+
+def CooldownExists(name: "str") -> "bool":
+    """
+     Checks whether a cooldown bar with the given name exists.
+     Example:
+     ```py
+     if API.CooldownExists("Healing"):
+     ```
+    
+    """
+    pass
+
 def IgnoreObject(serial: "int") -> None:
     """
      Adds an item or mobile to your ignore list.
@@ -2025,7 +2130,7 @@ def OnIgnoreList(serial: "int") -> "bool":
     """
     pass
 
-def Pathfind(x: "int", y: "int", z: "int" = 1337, distance: "int" = 1, wait: "bool" = False, timeout: "int" = 10) -> "bool":
+def Pathfind(x: "int", y: "int", z: "int" = 1337, distance: "int" = 1, wait: "bool" = False, timeout: "int" = 10, run: "bool" = True) -> "bool":
     """
      Attempt to pathfind to a location.  This will fail with large distances.
      Example:
@@ -2036,7 +2141,7 @@ def Pathfind(x: "int", y: "int", z: "int" = 1337, distance: "int" = 1, wait: "bo
     """
     pass
 
-def PathfindEntity(entity: "int", distance: "int" = 1, wait: "bool" = False, timeout: "int" = 10) -> "bool":
+def PathfindEntity(entity: "int", distance: "int" = 1, wait: "bool" = False, timeout: "int" = 10, run: "bool" = True) -> "bool":
     """
      Attempt to pathfind to a mobile or item.
      Example:
@@ -2255,6 +2360,18 @@ def TargetSelf() -> None:
     """
     pass
 
+def TargetRel(xOffset: "int", yOffset: "int", tilesOnly: "bool" = True) -> None:
+    """
+     Target the spot at an offset from your position, resolving it the same way a click would:
+     the topmost visible object there is targeted, whether that is an entity, a static/multi, or land.
+     Example:
+     ```py
+     API.TargetRel(1, 1)
+     ```
+    
+    """
+    pass
+
 def TargetLandRel(xOffset: "int", yOffset: "int") -> None:
     """
      Target a land tile relative to your position.
@@ -2267,10 +2384,10 @@ def TargetLandRel(xOffset: "int", yOffset: "int") -> None:
     """
     pass
 
-def TargetTileRel(xOffset: "int", yOffset: "int", graphic: "int" = 1337) -> None:
+def TargetTileRel(xOffset: "int", yOffset: "int", graphic: "int" = 1337, tilesOnly: "bool" = True) -> None:
     """
-     Target a tile relative to your location.
-     If this doesn't work, try TargetLandRel instead.'
+     Target the highest visible object at a tile relative to your location, skipping land.
+     Resolves the spot the same way <see cref="TargetRel"/> does, but never falls back to land.
      Example:
      ```py
      API.TargetTileRel(1, 1)
@@ -2305,6 +2422,20 @@ def CancelTarget() -> None:
      if API.WaitForTarget():
        API.CancelTarget()
        API.SysMsg("Targeting cancelled, april fools made you target something!")
+     ```
+    
+    """
+    pass
+
+def SetLastTarget(serial: "int | None" = None, x: "int | None" = None, y: "int | None" = None, z: "int | None" = None, graphic: "int | None" = None) -> None:
+    """
+     Override the client's last target. Pass a serial for an entity, or a location (x/y/z)
+     for a land tile. Include graphic to mark the location as a static instead.
+     Example:
+     ```py
+     API.SetLastTarget(serial=0x12345678)
+     API.SetLastTarget(x=1243, y=1337, z=0)
+     API.SetLastTarget(x=1243, y=1337, z=0, graphic=0x1)
      ```
     
     """
@@ -2793,6 +2924,28 @@ def Virtue(virtue: "str") -> None:
     """
     pass
 
+def OpenQuestLog() -> None:
+    """
+     Open the quest log gump.
+     Example:
+     ```py
+     API.OpenQuestLog()
+     ```
+    
+    """
+    pass
+
+def OpenHelp() -> None:
+    """
+     Open the help menu.
+     Example:
+     ```py
+     API.OpenHelp()
+     ```
+    
+    """
+    pass
+
 def NearestEntity(scanType: "ScanType", maxDistance: "int" = 10) -> "ApiEntity":
     """
      Find the nearest item/mobile based on scan type.
@@ -2870,9 +3023,10 @@ def FindMobile(serial: "int") -> "ApiMobile":
     """
     pass
 
-def GetAllMobiles(graphic: "int | None" = None, distance: "int | None" = None, notoriety: "list[Notoriety]" = None) -> "list[ApiMobile]":
+def GetAllMobiles(graphic: "int | None" = None, distance: "int | None" = None, notoriety: "list[Notoriety]" = None, sortby: "str" = "Distance", name: "str" = None, graphics: "list[int]" = None, minDistance: "int | None" = None, isHuman: "bool | None" = None, isFemale: "bool | None" = None, isGhost: "bool | None" = None, isFriend: "bool | None" = None, poisoned: "bool | None" = None, paralyzed: "bool | None" = None, hasLineOfSight: "bool | None" = None, hues: "list[int]" = None) -> "list[ApiMobile]":
     """
      Return a list of all mobiles the client is aware of, optionally filtered by graphic, distance, and/or notoriety.
+     Any additional filter is ignored unless supplied.
      Example:
      ```py
      # Get all mobiles
@@ -2883,6 +3037,12 @@ def GetAllMobiles(graphic: "int | None" = None, distance: "int | None" = None, n
      nearby_humans = API.GetAllMobiles(400, 5)
      # Get all enemies (murderers and criminals) within 15 tiles
      enemies = API.GetAllMobiles(distance=15, notoriety=[API.Notoriety.Murderer, API.Notoriety.Criminal])
+     # Get all mobiles sorted by current hits, lowest first
+     sorted_by_hits = API.GetAllMobiles(sortby="hits")
+     # Get all poisonous ogres within 10 tiles in line of sight
+     targets = API.GetAllMobiles(name="ogre", distance=10, poisoned=True, hasLineOfSight=True)
+     # Get only dead friends with a specific hue, at least 2 tiles away
+     ghosts = API.GetAllMobiles(isGhost=True, isFriend=True, minDistance=2, hues=[0x83EA])
      ```
     
     """
@@ -3088,7 +3248,7 @@ def CreateGumpRadioButton(text: "str" = "", group: "int" = 0, inactive: "int" = 
     """
     pass
 
-def CreateGumpTextBox(text: "str" = "", width: "int" = 200, height: "int" = 30, multiline: "bool" = False) -> "ApiUiTtfTextInputField":
+def CreateGumpTextBox(text: "str" = "", width: "int" = 200, height: "int" = 30, multiline: "bool" = False, fontSize: "float" = 20) -> "ApiUiTtfTextInputField":
     """
      Use API.Gumps.CreateGumpTextBox instead.
     
@@ -3515,6 +3675,12 @@ class EventSinkApiDeclaration:
          Invoked when a container is opened.
          The event's 'sender' is the Item, the event's argument is the item's serial
         
+        """
+        pass
+
+    def ObjectUsed(self, callback: "Any") -> None:
+        """
+        Invoked when the client sends a double-click (use) request for an object's serial.
         """
         pass
 

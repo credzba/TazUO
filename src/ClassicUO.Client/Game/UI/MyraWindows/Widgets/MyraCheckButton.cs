@@ -1,6 +1,8 @@
 #nullable enable
+
 using System;
 using ClassicUO.Common;
+using Myra.Events;
 using Myra.Graphics2D;
 using Myra.Graphics2D.UI;
 
@@ -9,7 +11,7 @@ namespace ClassicUO.Game.UI.MyraWindows.Widgets;
 public class MyraCheckButton : CheckButton
 {
     /// <summary>
-    /// This includes a label
+    ///     This includes a label
     /// </summary>
     /// <param name="text"></param>
     /// <param name="isChecked"></param>
@@ -33,8 +35,15 @@ public class MyraCheckButton : CheckButton
         VerticalAlignment = VerticalAlignment.Center;
     }
 
+    public override void OnTouchDown(TouchEventArgs args)
+    {
+        if (args.Button != TouchButton.Left)
+            return;
+            
+        base.OnTouchDown(args);
+    }
+
     /// <summary>
-    ///
     /// </summary>
     /// <param name="isChecked"></param>
     /// <param name="onChange"></param>
@@ -57,7 +66,7 @@ public class MyraCheckButton : CheckButton
         return cb;
     }
 
-    public static MyraCheckButton CreatePropBoundCheckButton(Accessor<bool> backingProperty, string? text = null,string? tooltip = null)
+    public static MyraCheckButton CreatePropBoundCheckButton(Accessor<bool> backingProperty, string? text = null, string? tooltip = null)
     {
         bool isChecked = backingProperty.Get();
 

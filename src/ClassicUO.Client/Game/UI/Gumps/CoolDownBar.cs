@@ -1,4 +1,5 @@
-﻿using ClassicUO.Configuration;
+﻿using ClassicUO.Assets;
+using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Renderer;
@@ -14,10 +15,11 @@ namespace ClassicUO.Game.UI.Gumps
         public static int DEFAULT_Y => ProfileManager.CurrentProfile.CoolDownY;
 
         private AlphaBlendControl background, foreground;
-        public readonly Label textLabel, cooldownLabel;
+        private readonly Control nameText, timerText;
         private DateTime expire;
         private TimeSpan duration;
         private int startX, startY;
+        public string Name { get; }
         private readonly bool isBuffBar;
 
         private GumpPic gumpPic;
@@ -65,22 +67,27 @@ namespace ClassicUO.Game.UI.Gumps
             }
 
             #region LABELS
+            Name = _name;
             if (_name.Length > 17)
             {
                 _name = _name.Substring(0, 16) + "..";
             }
-            textLabel = new Label(_name, true, _hue, background.Width, style: FontStyle.BlackBorder, align: Assets.TEXT_ALIGN_TYPE.TS_CENTER)
-            {
-                X = background.X
-            };
 
-            cooldownLabel = new Label("------", true, _hue, background.Width, style: FontStyle.BlackBorder, align: Assets.TEXT_ALIGN_TYPE.TS_CENTER)
+            if (isBuffBar)
             {
-                X = background.X,
-                Y = 0
-            };
-            cooldownLabel.Y = COOL_DOWN_HEIGHT - cooldownLabel.Height - 2;
-            cooldownLabel.Text = "";
+                nameText = CreateText(_name, background.Width, _hue);
+                timerText = CreateText("------", background.Width, _hue);
+            }
+            else
+            {
+                nameText = new Label(_name, true, _hue, background.Width, style: FontStyle.BlackBorder, align: Assets.TEXT_ALIGN_TYPE.TS_CENTER);
+                timerText = new Label("------", true, _hue, background.Width, style: FontStyle.BlackBorder, align: Assets.TEXT_ALIGN_TYPE.TS_CENTER);
+            }
+
+            nameText.X = background.X;
+            timerText.X = background.X;
+            timerText.Y = COOL_DOWN_HEIGHT - timerText.Height - 2;
+            SetText(timerText, string.Empty);
             #endregion
 
             #region ADD CONTROLS
@@ -88,14 +95,88 @@ namespace ClassicUO.Game.UI.Gumps
                 Add(gumpPic);
             Add(background);
             Add(foreground);
-            Add(textLabel);
-            Add(cooldownLabel);
+            Add(nameText);
+            Add(timerText);
             #endregion
+        }
+
+        private static TextBox CreateText(string text, int width, ushort hue) =>
+            TextBox.GetOne(text, GetBuffBarFont(), GetBuffBarFontSize(), hue, TextBox.RTLOptions.DefaultCenterStroked(width));
+
+        private static string GetBuffBarFont()
+        {
+            GlobalSettingsSave settings = ProfileManager.GlobalSettings;
+            return string.IsNullOrWhiteSpace(settings?.BuffBarFont) ? EmbeddedFontNames.AVADONIAN : settings.BuffBarFont;
+        }
+
+        private static float GetBuffBarFontSize()
+        {
+            GlobalSettingsSave settings = ProfileManager.GlobalSettings;
+            return settings == null || settings.BuffBarFontSize <= 0 ? 14 : settings.BuffBarFontSize;
+        }
+
+        private static void SetText(Control control, string text)
+        {
+            switch (control)
+            {
+                case Label label:
+                    label.Text = text;
+                    break;
+                case TextBox textBox:
+                    textBox.Text = text;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Applies the machine-wide buff bar font to live bars so option changes take effect without
+        /// re-adding buffs.
+        /// </summary>
+        private void SyncBuffBarFont()
+        {
+            if (nameText is not TextBox nameBox || timerText is not TextBox timerBox)
+                return;
+
+            string font = GetBuffBarFont();
+            float size = GetBuffBarFontSize();
+
+            if (nameBox.Font != font)
+            {
+                nameBox.Font = font;
+                timerBox.Font = font;
+            }
+
+            if (nameBox.FontSize != size)
+            {
+                nameBox.FontSize = size;
+                timerBox.FontSize = size;
+            }
+
+            timerText.Y = COOL_DOWN_HEIGHT - timerText.Height - 2;
+        }
+
+        public TimeSpan Remaining => expire - DateTime.Now;
+
+        public void Update(TimeSpan? maxValue = null, TimeSpan? currentValue = null)
+        {
+            if (maxValue.HasValue)
+                duration = maxValue.Value;
+
+            if (currentValue.HasValue)
+                expire = DateTime.Now + currentValue.Value;
+        }
+
+        public void Restart()
+        {
+            expire = DateTime.Now + duration;
         }
 
         public override void Update()
         {
             base.Update();
+
+            if (isBuffBar)
+                SyncBuffBarFont();
 
             if (
                 !isBuffBar &&
@@ -128,8 +209,8 @@ namespace ClassicUO.Game.UI.Gumps
                 int offset = 0;
                 if (gumpPic != null)
                     offset = gumpPic.Width;
-                foreground.Width = (int)((remaing.TotalSeconds / duration.TotalSeconds) * (COOL_DOWN_WIDTH - offset));
-                cooldownLabel.Text = ((int)remaing.TotalSeconds).ToString();
+                foreground.Width = Math.Max(0, Math.Min(COOL_DOWN_WIDTH - offset, (int)((remaing.TotalSeconds / duration.TotalSeconds) * (COOL_DOWN_WIDTH - offset))));
+                SetText(timerText, ((int)remaing.TotalSeconds).ToString());
             }
 
             base.Draw(batcher, x, y);

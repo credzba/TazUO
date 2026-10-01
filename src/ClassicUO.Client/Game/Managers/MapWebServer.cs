@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Utility.Logging;
@@ -48,6 +50,24 @@ namespace ClassicUO.Game.Managers
 
         public bool Start(int port = 8088)
         {
+            try
+            {
+                return StartCore(port);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to start Map Web Server: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Isolated so that a failure to resolve the System.Net.HttpListener assembly at JIT
+        /// time surfaces as a catchable exception in <see cref="Start"/> rather than crashing.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private bool StartCore(int port)
+        {
             if (_isRunning)
                 return false;
 
@@ -78,6 +98,23 @@ namespace ClassicUO.Game.Managers
         }
 
         public void Stop()
+        {
+            try
+            {
+                StopCore();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error stopping Map Web Server: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Isolated so that a failure to resolve the System.Net.HttpListener assembly at JIT
+        /// time surfaces as a catchable exception in <see cref="Stop"/> rather than crashing.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void StopCore()
         {
             if (!_isRunning)
                 return;
@@ -835,8 +872,10 @@ namespace ClassicUO.Game.Managers
         {
             try
             {
-                int width = Client.Settings.Get(SettingsScope.Global, "webmap_journal_width", 400);
-                int height = Client.Settings.Get(SettingsScope.Global, "webmap_journal_height", 300);
+                GlobalSettingsSave globalSettings = Configuration.ProfileManager.GlobalSettings;
+
+                int width = globalSettings?.WebMapJournalWidth ?? 400;
+                int height = globalSettings?.WebMapJournalHeight ?? 300;
 
                 var data = new
                 {
@@ -871,8 +910,12 @@ namespace ClassicUO.Game.Managers
 
                     if (sizeData != null && sizeData.TryGetValue("width", out int width) && sizeData.TryGetValue("height", out int height))
                     {
-                        _ = Client.Settings.SetAsync(SettingsScope.Global, "webmap_journal_width", width);
-                        _ = Client.Settings.SetAsync(SettingsScope.Global, "webmap_journal_height", height);
+                        GlobalSettingsSave globalSettings = Configuration.ProfileManager.GlobalSettings;
+                        if (globalSettings != null)
+                        {
+                            globalSettings.WebMapJournalWidth = width;
+                            globalSettings.WebMapJournalHeight = height;
+                        }
 
                         response.StatusCode = 200;
                         byte[] buffer = Encoding.UTF8.GetBytes("{\"status\":\"ok\"}");
@@ -900,8 +943,10 @@ namespace ClassicUO.Game.Managers
         {
             try
             {
-                bool journalMinimized = Client.Settings.Get(SettingsScope.Global, "webmap_journal_minimized", false);
-                bool controlsMinimized = Client.Settings.Get(SettingsScope.Global, "webmap_controls_minimized", false);
+                GlobalSettingsSave globalSettings = Configuration.ProfileManager.GlobalSettings;
+
+                bool journalMinimized = globalSettings?.WebMapJournalMinimized ?? false;
+                bool controlsMinimized = globalSettings?.WebMapControlsMinimized ?? false;
 
                 var data = new
                 {
@@ -938,8 +983,12 @@ namespace ClassicUO.Game.Managers
                         stateData.TryGetValue("journalMinimized", out bool journalMinimized) &&
                         stateData.TryGetValue("controlsMinimized", out bool controlsMinimized))
                     {
-                        _ = Client.Settings.SetAsync(SettingsScope.Global, "webmap_journal_minimized", journalMinimized);
-                        _ = Client.Settings.SetAsync(SettingsScope.Global, "webmap_controls_minimized", controlsMinimized);
+                        GlobalSettingsSave globalSettings = Configuration.ProfileManager.GlobalSettings;
+                        if (globalSettings != null)
+                        {
+                            globalSettings.WebMapJournalMinimized = journalMinimized;
+                            globalSettings.WebMapControlsMinimized = controlsMinimized;
+                        }
 
                         response.StatusCode = 200;
                         byte[] buffer = Encoding.UTF8.GetBytes("{\"status\":\"ok\"}");

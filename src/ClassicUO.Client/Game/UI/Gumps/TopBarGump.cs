@@ -95,6 +95,8 @@ namespace ClassicUO.Game.UI.Gumps
 
             int startX = 30;
 
+            RighClickableButton journalButton = null;
+
             for (int i = 0; i < textTable.Length; i++)
             {
                 if (!hasUOStore && i >= (int)Buttons.UOStore)
@@ -104,29 +106,49 @@ namespace ClassicUO.Game.UI.Gumps
 
                 ushort graphic = (ushort)(textTable[i][0] != 0 ? 0x098D : 0x098B);
 
-                Add(
-                    new RighClickableButton(
-                        textTable[i][1],
-                        graphic,
-                        graphic,
-                        graphic,
-                        texts[i],
-                        1,
-                        true,
-                        0,
-                        0x0036
-                    )
-                    {
-                        ButtonAction = ButtonAction.Activate,
-                        X = startX,
-                        Y = 1,
-                        FontCenter = true
-                    },
-                    1
-                );
+                RighClickableButton button = new RighClickableButton(
+                    textTable[i][1],
+                    graphic,
+                    graphic,
+                    graphic,
+                    texts[i],
+                    1,
+                    true,
+                    0,
+                    0x0036
+                )
+                {
+                    ButtonAction = ButtonAction.Activate,
+                    X = startX,
+                    Y = 1,
+                    FontCenter = true
+                };
+
+                Add(button, 1);
+
+                if (textTable[i][1] == (int)Buttons.Journal)
+                {
+                    journalButton = button;
+                }
 
                 startX += (textTable[i][0] != 0 ? largeWidth : smallWidth) + 1;
                 background.Width = startX;
+            }
+
+            if (journalButton != null)
+            {
+                journalButton.ContextMenu = new ContextMenuControl(this);
+                journalButton.ContextMenu.Add(
+                    TazLang.Get("topbargump_openoriginaljournal", "Open original journal"),
+                    () => UIManager.Add(new JournalGump(world))
+                );
+                journalButton.MouseUp += (s, e) =>
+                {
+                    if (e.Button == MouseButtonType.Right)
+                    {
+                        journalButton.ContextMenu?.Show();
+                    }
+                };
             }
 
             RighClickableButton assistant;
@@ -250,6 +272,19 @@ namespace ClassicUO.Game.UI.Gumps
             moreMenu.ContextMenu.Add(new ContextMenuItemEntry(TazLang.Get("topbargump_radarmap", "Radar Map"), () => { GameActions.OpenMiniMap(World); }));
 
             moreMenu.ContextMenu.Add(new ContextMenuItemEntry(TazLang.Get("topbargump_polls", "Polls"), MyraWindows.PollsWindow.Show));
+
+            var actionBarsMenu = new ContextMenuItemEntry(TazLang.Get("topbargump_actionbars", "Action Bars"));
+            actionBarsMenu.Add(new ContextMenuItemEntry(TazLang.Get("topbargump_addactionbar", "Add action bar"), () =>
+            {
+                new PromptPopupWindow(
+                    TazLang.Get("actionbar_newtitle", "New action bar"),
+                    TazLang.Get("actionbar_newmessage", "Name for the new action bar:"),
+                    name => ActionBarGump.Create(world, name),
+                    TazLang.Get("uicommons_create", "Create"),
+                    TazLang.Get("uicommons_cancel", "Cancel")
+                );
+            }));
+            moreMenu.ContextMenu.Add(actionBarsMenu);
 
             var submenu = new ContextMenuItemEntry(TazLang.Get("topbargump_tools", "Tools"));
             submenu.Add(new ContextMenuItemEntry(TazLang.Get("topbargump_spellquickcast", "Spell quick cast"), () => { UIManager.Add(new SpellQuickSearch(World, 200, 200, (sp) => {if (sp != null) GameActions.CastSpell(sp.ID);})); }));

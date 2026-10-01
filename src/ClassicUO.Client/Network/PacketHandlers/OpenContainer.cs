@@ -159,7 +159,10 @@ internal static class OpenContainer
 
                         // "Old grid loot only" shows just the loot gump; the combined mode also opens the container.
                         if (corpseStyle == CorpseContainerStyle.OldGridLoot)
+                        {
+                            EventSink.InvokeOnOpenContainer(item, serial);
                             return;
+                        }
                     }
 
                     if (
@@ -219,6 +222,9 @@ internal static class OpenContainer
             if (it != null)
             {
                 it.Opened = true;
+
+                if (it.IsCorpse && ProfileManager.ServerSettings is { DoNotReopenCorpses: true })
+                    CorpseManager.MarkCorpseOpened(serial);
 
                 if (!it.IsCorpse && graphic != 0xFFFF)
                     Helpers.ItemHelpers.ClearContainerAndRemoveItems(world, it);
@@ -342,7 +348,10 @@ internal static class OpenContainer
 
                         // "Old grid loot only" shows just the loot gump; the combined mode also opens the container.
                         if (corpseStyle == CorpseContainerStyle.OldGridLoot)
+                        {
+                            EventSink.InvokeOnOpenContainer(item, serial);
                             return;
+                        }
                     }
                     bool canuse = graphic == 1009 || graphic == 1081 || graphic == 1278 || graphic == 2417 || (graphic >= 1060 && graphic <= 1068) || (graphic >= 1071 && graphic <= 1079) || (graphic >= 1258 && graphic <= 1270) || (graphic >= 1282 && graphic <= 1291) || (graphic >= 1071 && graphic <= 1079);
 
@@ -425,6 +434,9 @@ internal static class OpenContainer
             if (it != null)
             {
                 it.Opened = true;
+
+                if (it.IsCorpse && ProfileManager.ServerSettings is { DoNotReopenCorpses: true })
+                    CorpseManager.MarkCorpseOpened(serial);
 
                 if (!it.IsCorpse && graphic != 0xFFFF)
                     Helpers.ItemHelpers.ClearContainerAndRemoveItems(world, it);

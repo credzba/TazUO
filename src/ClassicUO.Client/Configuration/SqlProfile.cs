@@ -94,14 +94,6 @@ public sealed partial class Profile
         public partial int OldMinGumpMoveDistance { get; set; }
 
         [JsonIgnore]
-        [SqlSetting(SettingsScope.Char, Constants.SqlSettings.QUICK_HEAL_SPELL, 29)]
-        public partial int OldQuickHealSpell { get; set; }
-
-        [JsonIgnore]
-        [SqlSetting(SettingsScope.Char, Constants.SqlSettings.QUICK_CURE_SPELL, 11)]
-        public partial int OldQuickCureSpell { get; set; }
-
-        [JsonIgnore]
         [SqlSetting(SettingsScope.Global, Constants.SqlSettings.WEB_MAP_PORT, 8088)]
         public partial int OldWebMapServerPort { get; set; }
 
@@ -138,6 +130,10 @@ public sealed partial class Profile
 
         // When false, overheads (names, health bars, overhead text) keep a constant on-screen size
         // regardless of the camera zoom. Their positions still follow the zoomed world.
+        [JsonIgnore]
+        [SqlSetting(SettingsScope.Char, Constants.SqlSettings.AUTO_STAT_LOCK, "")]
+        public partial string OldAutoStatLockJson { get; set; }
+
         [JsonIgnore]
         [SqlSetting(SettingsScope.Global, Constants.SqlSettings.OVERHEADS_SCALE_WITH_ZOOM, true)]
         public partial bool OldOverheadsScaleWithZoom { get; set; }
@@ -178,4 +174,10 @@ public sealed partial class Profile
         [JsonIgnore]
         [SqlSetting(SettingsScope.Char, "script_manager_window_position")]
         public partial Point? OldScriptManagerWindowPosition { get; set; }
+
+        // Whether the player has already acknowledged the photosensitivity warning shown the first
+        // time screen decorations are enabled. Global: the warning is about the person, not the character.
+        [JsonIgnore]
+        [SqlSetting(SettingsScope.Global, "screen_decorations_pse_acknowledged", false)]
+        public partial bool ScreenDecorationsPseAcknowledged { get; set; }
 }

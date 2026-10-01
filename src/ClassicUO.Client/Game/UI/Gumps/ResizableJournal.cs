@@ -304,6 +304,20 @@ namespace ClassicUO.Game.UI.Gumps
 
         public static void UpdateJournalOptions() => UIManager.ForEach<ResizableJournal>(p => p.UpdateOptions());
 
+        /// <summary>
+        /// Keeps reclassified Global Chat entries out of the System filter even though their
+        /// underlying text category remains <see cref="TextType.SYSTEM"/>.
+        /// </summary>
+        internal static bool MatchesMessageTypeFilter(TextType textType, MessageType messageType, MessageType filter)
+        {
+            if (messageType == MessageType.ChatSystem)
+            {
+                return filter == MessageType.ChatSystem;
+            }
+
+            return textType == TextType.SYSTEM ? filter == MessageType.System : filter == messageType;
+        }
+
         public override void Save(XmlTextWriter writer)
         {
             base.Save(writer);
@@ -563,7 +577,7 @@ namespace ClassicUO.Game.UI.Gumps
             {
                 base.Draw(batcher, x, y);
                 int my = y;
-                bool hideTimestamp = ProfileManager.CurrentProfile.HideJournalTimestamp;
+                bool hideTimestamp = ProfileManager.GlobalSettings.HideJournalTimestamp;
 
                 if (batcher.ClipBegin(x, y, Width, Height))
                 {
@@ -625,7 +639,7 @@ namespace ClassicUO.Game.UI.Gumps
                     {
                         if (_ is null)
                             continue;
-                        _.EntryText.Width = Width - BORDER_WIDTH - (ProfileManager.CurrentProfile.HideJournalTimestamp ? 0 : _.TimeStamp.Width);
+                        _.EntryText.Width = Width - BORDER_WIDTH - (ProfileManager.GlobalSettings.HideJournalTimestamp ? 0 : _.TimeStamp.Width);
                         _.EntryText.Update(); //Because this control isn't a child of any gump, it doesn't get updated
                     }
 
@@ -690,7 +704,7 @@ namespace ClassicUO.Game.UI.Gumps
                 string timestampText = $"{time:t}";
                 var timeS = TextBox.GetOne(timestampText, ProfileManager.CurrentProfile.SelectedTTFJournalFont, ProfileManager.CurrentProfile.SelectedJournalFontSize - 2, 1150, TextBox.RTLOptions.Default());
                 var je = TextBox.GetOne(text, ProfileManager.CurrentProfile.SelectedTTFJournalFont, ProfileManager.CurrentProfile.SelectedJournalFontSize, hue,
-                    new TextBox.RTLOptions() { Width = Width - (ProfileManager.CurrentProfile.HideJournalTimestamp ? 0 : timeS.Width), CalculateGlyphs = true });
+                    new TextBox.RTLOptions() { Width = Width - (ProfileManager.GlobalSettings.HideJournalTimestamp ? 0 : timeS.Width), CalculateGlyphs = true });
 
                 journalDatas.AddToBack(
                     new JournalData(
@@ -794,7 +808,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 int contentY = y + _scrollBar.Value;
                 int rowY = 0;
-                bool hideTimestamp = ProfileManager.CurrentProfile.HideJournalTimestamp;
+                bool hideTimestamp = ProfileManager.GlobalSettings.HideJournalTimestamp;
 
                 foreach (JournalData entry in journalDatas)
                 {
@@ -849,7 +863,7 @@ namespace ClassicUO.Game.UI.Gumps
                 int nearestIndex = 0;
                 int contentY = y + _scrollBar.Value;
                 int rowY = 0;
-                bool hideTimestamp = ProfileManager.CurrentProfile.HideJournalTimestamp;
+                bool hideTimestamp = ProfileManager.GlobalSettings.HideJournalTimestamp;
 
                 foreach (JournalData entry in journalDatas)
                 {
@@ -1011,7 +1025,7 @@ namespace ClassicUO.Game.UI.Gumps
                 }
 
                 StringBuilder sb = new StringBuilder();
-                bool hideTimestamp = ProfileManager.CurrentProfile.HideJournalTimestamp;
+                bool hideTimestamp = ProfileManager.GlobalSettings.HideJournalTimestamp;
 
                 foreach (JournalData entry in journalDatas)
                 {
@@ -1106,17 +1120,10 @@ namespace ClassicUO.Game.UI.Gumps
                     {
                         MessageType currentfilter = _resizableJournal._currentFilter[i];
 
-                        if (messageType == MessageType.ChatSystem && currentfilter == MessageType.ChatSystem)
+                        if (MatchesMessageTypeFilter(type, messageType, currentfilter))
+                        {
                             return true;
-
-                        if (type == TextType.SYSTEM && currentfilter == MessageType.System)
-                            return true;
-
-                        if (type == TextType.SYSTEM && currentfilter != MessageType.System)
-                            continue;
-
-                        if (currentfilter == messageType)
-                            return true;
+                        }
                     }
                     return false;
                 }

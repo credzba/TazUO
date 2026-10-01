@@ -155,7 +155,7 @@ namespace ClassicUO.Game.GameObjects
             {
                 Item it = Mount;
 
-                if (it != null && !IsDrivingBoat && it.GetGraphicForAnimation() != 0xFFFF)
+                if (it != null && !IsDead && !IsDrivingBoat && it.GetGraphicForAnimation() != 0xFFFF)
                 {
                     return true;
                 }
@@ -566,7 +566,7 @@ namespace ClassicUO.Game.GameObjects
         private void ProcessFootstepsSound()
         {
             if (
-                (ProfileManager.CurrentProfile == null || ProfileManager.CurrentProfile.EnableFootstepsSound)
+                (ProfileManager.GlobalSettings == null || ProfileManager.GlobalSettings.EnableFootstepsSound)
                 && IsHuman
                 && !IsHidden
                 && !IsDead
@@ -740,12 +740,7 @@ namespace ClassicUO.Game.GameObjects
             if (Steps.Count != 0 && !IsDestroyed)
             {
                 ref Step step = ref Steps.Front();
-                dir = step.Direction;
-
-                if (step.Run)
-                {
-                    dir &= 7;
-                }
+                dir = (byte)(step.Direction & 7);
 
                 if (evalutate)
                 {
@@ -878,7 +873,11 @@ namespace ClassicUO.Game.GameObjects
                         Offset.X = 0;
                         Offset.Y = 0;
                         Offset.Z = 0;
-                        Steps.RemoveFromFront();
+
+                        if (Steps.Count != 0)
+                        {
+                            Steps.RemoveFromFront();
+                        }
 
                         if (Steps.Count == 0)
                         {

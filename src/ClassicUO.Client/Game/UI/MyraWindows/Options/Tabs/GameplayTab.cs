@@ -54,7 +54,10 @@ public static class GameplayTab
                     TazLang.Get("mog_tazuo_onlyshowbelowhp"),
                     0,
                     100,
-                    new Accessor<float>(() => profile.ShowHealthIndicatorBelow),
+                    new Accessor<float>(
+                        () => profile.ShowHealthIndicatorBelow * 100f,
+                        value => profile.ShowHealthIndicatorBelow = value / 100f
+                    ),
                     search: new SearchMetadata(TazLang.Get("mog_tazuo_onlyshowbelowhp"), Keywords: [TazLang.Get("mog_kw_hp")])
                 ),
                 Option.Slider(
@@ -64,7 +67,12 @@ public static class GameplayTab
                     new Accessor<float>(() => profile.HealthIndicatorWidth, f => profile.HealthIndicatorWidth = (int)f),
                     search: new SearchMetadata(TazLang.Get("mog_tazuo_size"), Keywords: [TazLang.Get("mog_kw_size")])
                 )
-            ).WithSearch(new SearchMetadata(TazLang.Get("mog_tazuo_healthbarindicator"), Keywords: [TazLang.Get("mog_kw_indicator"), TazLang.Get("mog_kw_border")]))
+            ).WithSearch(new SearchMetadata(TazLang.Get("mog_tazuo_healthbarindicator"), Keywords: [TazLang.Get("mog_kw_indicator"), TazLang.Get("mog_kw_border")])),
+            Option.Checkbox(
+                TazLang.Get("mog_tazuo_showdragitempreview"),
+                new Accessor<bool>(() => ProfileManager.GlobalSettings.ShowDragItemPreview),
+                search: new SearchMetadata(TazLang.Get("mog_tazuo_showdragitempreview"), Keywords: [TazLang.Get("mog_kw_drag"), TazLang.Get("mog_kw_item"), TazLang.Get("mog_kw_preview")])
+            )
         ).WithSearch(new SearchMetadata(TazLang.Get("mog_gameplaytab_misc_label"), Tags: [TazLang.Get("mog_kw_misc")]));
     }
 

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using ClassicUO.IO.Audio;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.Effects;
@@ -17,12 +18,14 @@ using ClassicUO.Game.Scenes;
 using ClassicUO.Utility.Logging;
 using ClassicUO.Assets;
 using ClassicUO.Game.UI;
+using ClassicUO.Network;
 
 namespace ClassicUO.Game
 {
     public sealed class World
     {
         public static World Instance { get; private set; }
+        public static HashSet<EnhancedPacketDisabledFeaturesEnum> DisabledFeatures = new();
         private readonly EffectManager _effectManager;
         private readonly List<uint> _toRemove = new List<uint>();
         private uint _timeToDelete;
@@ -145,6 +148,11 @@ namespace ClassicUO.Game
         public Dictionary<uint, Item> Items { get; } = new Dictionary<uint, Item>();
 
         public Dictionary<uint, Mobile> Mobiles { get; } = new Dictionary<uint, Mobile>();
+
+        // Pre-grows the item dictionary in large steps once a spawn burst is detected, reducing repeated rehashes.
+        private const int ITEM_BURST_GROW_THRESHOLD = 128;
+        private const int ITEM_BURST_GROW_STEP = 2048;
+        private int _itemsCreatedSinceLastGrow;
 
         // Separate collection for corpses to optimize iteration in TryOpenCorpses
         private readonly HashSet<Item> _corpses = new HashSet<Item>();
@@ -343,6 +351,8 @@ namespace ClassicUO.Game
             {
                 string lastChar = LastCharacterManager.GetLastCharacter(LoginScene.Account, ServerName);
                 ProfileManager.Load(ServerName, LoginScene.Account, lastChar, serial);
+                SoundFilterManager.MigrateLegacySqlSettings();
+                SeasonFilter.MigrateLegacySqlSettings();
             }
 
             if (Player != null)
@@ -626,42 +636,46 @@ namespace ClassicUO.Game
             return ent;
         }
 
-        public Item GetOrCreateItem(uint serial)
+        public Item GetOrCreateItem(uint serial) => GetOrCreateItem(serial, out _);
+
+        public Item GetOrCreateItem(uint serial, out bool created)
         {
-            Item item = Items.Get(serial);
+            // Single hash lookup instead of Get + Add; also pre-grows capacity during spawn bursts.
+            ref Item slot = ref CollectionsMarshal.GetValueRefOrAddDefault(Items, serial, out bool exists);
 
-            if (item != null && item.IsDestroyed)
+            if (exists && !slot.IsDestroyed)
             {
-                Items.Remove(serial);
-                item = null;
+                created = false;
+                return slot;
             }
 
-            if (item == null /*|| item.IsDestroyed*/)
+            created = true;
+            slot = Item.Create(this, serial);
+
+            if (++_itemsCreatedSinceLastGrow >= ITEM_BURST_GROW_THRESHOLD)
             {
-                item = Item.Create(this, serial);
-                Items.Add(item);
+                _itemsCreatedSinceLastGrow = 0;
+                Items.EnsureCapacity(Items.Count + ITEM_BURST_GROW_STEP);
             }
 
-            return item;
+            return slot;
         }
 
-        public Mobile GetOrCreateMobile(uint serial)
+        public Mobile GetOrCreateMobile(uint serial) => GetOrCreateMobile(serial, out _);
+
+        public Mobile GetOrCreateMobile(uint serial, out bool created)
         {
-            Mobile mob = Mobiles.Get(serial);
+            ref Mobile slot = ref CollectionsMarshal.GetValueRefOrAddDefault(Mobiles, serial, out bool exists);
 
-            if (mob != null && mob.IsDestroyed)
+            if (exists && !slot.IsDestroyed)
             {
-                Mobiles.Remove(serial);
-                mob = null;
+                created = false;
+                return slot;
             }
 
-            if (mob == null /*|| mob.IsDestroyed*/)
-            {
-                mob = Mobile.Create(this, serial);
-                Mobiles.Add(mob);
-            }
-
-            return mob;
+            created = true;
+            slot = Mobile.Create(this, serial);
+            return slot;
         }
 
         public void RemoveItemFromContainer(uint serial)
@@ -1040,6 +1054,7 @@ namespace ClassicUO.Game
             ActiveSpellIcons.Clear();
 
             SkillsRequested = false;
+            DisabledFeatures.Clear();
         }
 
         private void UnlinkEntitiesFromMap()

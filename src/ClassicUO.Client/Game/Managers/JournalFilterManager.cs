@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -35,6 +36,9 @@ public class JournalFilterManager
 
     public bool IgnoreMessage(string message)
     {
+        if (string.IsNullOrEmpty(message))
+            return false;
+
         foreach (string filter in _save.Filters)
         {
             if (message.Contains(filter, StringComparison.OrdinalIgnoreCase))
@@ -114,7 +118,7 @@ public class JournalFilterManager
 /// JSON-backed store for a character's journal filters. Persisted to <c>journal_filters.json</c> in the
 /// current profile folder. Saving/loading (with rotating backups) is handled by <see cref="JsonSave{T}"/>.
 /// </summary>
-public sealed class JournalFilterSave : JsonSave<JournalFilterSave>
+public sealed class JournalFilterSave : JsonSave<JournalFilterSave>, INotifyPropertyChanged
 {
     public const string JournalFiltersFileName = "journal_filters.json";
 

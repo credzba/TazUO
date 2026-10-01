@@ -377,6 +377,11 @@ namespace ClassicUO.Game.GameObjects
             {
                 if (!item.IsDestroyed && item.Distance <= ProfileManager.CurrentProfile.AutoOpenCorpseRange && !AutoOpenedCorpses.Contains(item.Serial))
                 {
+                    // Don't reopen corpses the player has already opened when the per-server option is on.
+                    if (ProfileManager.ServerSettings is { DoNotReopenCorpses: true }
+                        && CorpseManager.IsCorpseOpened(item.Serial))
+                        continue;
+
                     // Check if this is the player's own corpse
                     bool isOwnCorpse = !string.IsNullOrEmpty(item.Name) &&
                                        !string.IsNullOrEmpty(Name) &&
@@ -403,7 +408,7 @@ namespace ClassicUO.Game.GameObjects
                         }
 
                         AutoOpenedCorpses.Add(item.Serial);
-                        GameActions.QueueOpenCorpse(item.Serial);
+                        GameActions.QueueOpenCorpse(item.Serial, isOwnCorpse);
                     }
                 }
             }
@@ -423,14 +428,116 @@ namespace ClassicUO.Game.GameObjects
                 int x = X, y = Y, z = Z;
                 Pathfinder.GetNewXY((byte)Direction, ref x, ref y);
 
-                // Send_OpenDoor toggles the door server-side, so skip already-open doors to
-                // avoid closing one the player (or a script) deliberately left open.
-                if (World.Items.Values.Any(s => s.ItemData.IsDoor && s.X == x && s.Y == y && s.Z - 15 <= z && s.Z + 15 >= z
-                    && !DoorData.IsOpenDoor(s.Graphic)))
+                // Send_OpenDoor toggles the door server-side. Skip already-open doors to avoid
+                // closing one the player (or a script) deliberately left open, unless the global
+                // auto-close setting is enabled, which uses the door regardless of its state.
+                bool closeOpenDoors = ProfileManager.GlobalSettings.AutoCloseDoors;
+
+                // Walk the tile's linked list instead of scanning every item in the world.
+                GameObject obj = World.Map.GetTile(x, y, false);
+
+                while (obj?.TPrevious != null)
                 {
-                    GameActions.OpenDoor();
+                    obj = obj.TPrevious;
+                }
+
+                for (; obj != null; obj = obj.TNext)
+                {
+                    if (obj is Item door && door.ItemData.IsDoor && door.Z - 15 <= z && door.Z + 15 >= z
+                        && (closeOpenDoors || !DoorData.IsOpenDoor(door.Graphic)))
+                    {
+                        GameActions.OpenDoor();
+                    }
                 }
             }
+        }
+
+        // Block walking into a door when auto open is off to avoid spamming the server with
+        // walk requests that get denied and cause the client to bounce back. Open doors are
+        // blocked too because the client's notion of a door's state may not match the server's.
+        // While the smooth-door (pathfinding) setting is on, closed doors are exempt since they
+        // are opened as part of the approach instead.
+        private bool IsBlockedByDoor(int startX, int startY, int x, int y, sbyte z)
+        {
+            if (TileHasDoor(x, y, z))
+            {
+                return true;
+            }
+
+            // A diagonal step cuts across the corner shared by two tiles, and the server
+            // rejects it when either flanking tile blocks. Mirror that here so a door
+            // beside the path still stops the diagonal.
+            if (startX != x && startY != y)
+            {
+                return IsFlankingDoorBlocked(startX, y, z) || IsFlankingDoorBlocked(x, startY, z);
+            }
+
+            return false;
+        }
+
+        private bool TileHasDoor(int x, int y, sbyte z)
+        {
+            Profile profile = ProfileManager.CurrentProfile;
+
+            if (!profile.BlockDoorMovement || profile.AutoOpenDoors || IsDead)
+            {
+                return false;
+            }
+
+            return FindDoorOnTile(x, y, z, out _);
+        }
+
+        // Auto-open only ever touches the tile the player is facing, so a door beside a
+        // diagonal path is never handled there. An open door still blocks the corner the
+        // server checks, so when auto-close is on, shut it right before the step so the walk
+        // can go through; otherwise fall back to the block-walking option.
+        private bool IsFlankingDoorBlocked(int x, int y, sbyte z)
+        {
+            Profile profile = ProfileManager.CurrentProfile;
+
+            if (profile.AutoOpenDoors && !IsDead)
+            {
+                if (FindDoorOnTile(x, y, z, out Item door))
+                {
+                    if (ProfileManager.GlobalSettings.AutoCloseDoors && DoorData.IsOpenDoor(door.Graphic))
+                    {
+                        AsyncNetClient.Socket.Send_DoubleClick(door.Serial);
+                        return false;
+                    }
+
+                    return profile.BlockDoorMovement;
+                }
+
+                return false;
+            }
+
+            return TileHasDoor(x, y, z);
+        }
+
+        // Walk the tile's linked list instead of scanning every item in the world.
+        private bool FindDoorOnTile(int x, int y, sbyte z, out Item door)
+        {
+            Profile profile = ProfileManager.CurrentProfile;
+            door = null;
+
+            GameObject obj = World.Map.GetTile(x, y, false);
+
+            while (obj?.TPrevious != null)
+            {
+                obj = obj.TPrevious;
+            }
+
+            for (; obj != null; obj = obj.TNext)
+            {
+                if (obj is Item d && d.ItemData.IsDoor && d.Z - 15 <= z && d.Z + 15 >= z
+                    && (!profile.SmoothDoors || DoorData.IsOpenDoor(d.Graphic)))
+                {
+                    door = d;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public override void Destroy()
@@ -662,8 +769,11 @@ namespace ClassicUO.Game.GameObjects
                     oldDirection = (Direction)walkStep.Direction;
                 }
 
+                int startX = x;
+                int startY = y;
+                sbyte startZ = z;
                 sbyte oldZ = z;
-                ushort walkTime = ProfileManager.CurrentProfile.TurnDelay;
+                ushort walkTime = ProfileManager.ServerSettings.TurnDelay;
 
 
                 if (IsCardinalDirection(direction))
@@ -739,6 +849,11 @@ namespace ClassicUO.Game.GameObjects
                     }
 
                     direction = newDir;
+                }
+
+                if (IsBlockedByDoor(startX, startY, x, y, z) && (x != startX || y != startY || z != startZ))
+                {
+                    return false;
                 }
 
                 CloseBank();
@@ -869,8 +984,11 @@ namespace ClassicUO.Game.GameObjects
                 oldDirection = (Direction)walkStep.Direction;
             }
 
+            int startX = x;
+            int startY = y;
+            sbyte startZ = z;
             sbyte oldZ = z;
-            ushort walkTime = ProfileManager.CurrentProfile.TurnDelay;
+            ushort walkTime = ProfileManager.ServerSettings.TurnDelay;
 
             if ((oldDirection & Direction.Mask) == (direction & Direction.Mask))
             {
@@ -923,6 +1041,11 @@ namespace ClassicUO.Game.GameObjects
                 }
 
                 direction = newDir;
+            }
+
+            if (IsBlockedByDoor(startX, startY, x, y, z) && (x != startX || y != startY || z != startZ))
+            {
+                return false;
             }
 
             CloseBank();

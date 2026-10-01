@@ -14,7 +14,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 :::
 
 
-*This was generated on `9/27/26`.*
+*This was generated on `10/1/26`.*
 
 ## Properties
 ### `Events`
@@ -236,6 +236,23 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `callback` | `object` | ✅ Yes | Python function to invoke when the hotkey is pressed.<br>         If None, the hotkey will be unregistered. |
 
 **Return Type:** `void` *(Does not return anything)*
+
+---
+
+### IsKeyPressed
+`(key)`
+ Returns true if the given key combination is currently held down.
+ The key format matches `OnHotKey` , e.g. "CTRL+SHIFT+F1" or "A".
+ Extra modifiers beyond those specified do not prevent a match.
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | ❌ No | Key combination to check, e.g. "CTRL+SHIFT+F1". |
+
+**Return Type:** `bool`
 
 ---
 
@@ -499,6 +516,28 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `serial` | `uint` | ❌ No |  |
 
 **Return Type:** `int`
+
+---
+
+### GetSpellsInSpellbook
+`(serial)`
+ Get the names of all spells scribed into a spellbook.
+ Example:
+ ```py
+ spells = API.GetSpellsInSpellbook(book_serial)
+ if spells:
+   for spell in spells:
+     API.SysMsg(spell)
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `serial` | `uint` | ❌ No | Serial of the spellbook item |
+
+**Return Type:** `string[]`
 
 ---
 
@@ -1443,6 +1482,84 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 
 ---
 
+### UpdateCooldown
+`(name, maxValue, currentValue)`
+ Updates an existing cooldown bar. Only the provided values are applied.
+ Example:
+ ```py
+ API.UpdateCooldown("Healing", maxValue=10, currentValue=5)
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | ❌ No | Name of the cooldown bar to update |
+| `maxValue` | `double` | ✅ Yes | New total duration in seconds. Omit or pass -1 to leave unchanged |
+| `currentValue` | `double` | ✅ Yes | New remaining time in seconds. Omit or pass -1 to leave unchanged |
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### RestartCooldown
+`(name)`
+ Restarts the countdown of an existing cooldown bar to its full duration.
+ Example:
+ ```py
+ API.RestartCooldown("Healing")
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | ❌ No | Name of the cooldown bar to restart |
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### DeleteCooldown
+`(name)`
+ Deletes an existing cooldown bar.
+ Example:
+ ```py
+ API.DeleteCooldown("Healing")
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | ❌ No | Name of the cooldown bar to delete |
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### CooldownExists
+`(name)`
+ Checks whether a cooldown bar with the given name exists.
+ Example:
+ ```py
+ if API.CooldownExists("Healing"):
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | ❌ No | Name of the cooldown bar to check |
+
+**Return Type:** `bool`
+
+---
+
 ### IgnoreObject
 `(serial)`
  Adds an item or mobile to your ignore list.
@@ -1518,7 +1635,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 ---
 
 ### Pathfind
-`(x, y, z, distance, wait, timeout)`
+`(x, y, z, distance, wait, timeout, run)`
  Attempt to pathfind to a location.  This will fail with large distances.
  Example:
  ```py
@@ -1536,13 +1653,14 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `distance` | `int` | ✅ Yes | Distance away from goal to stop. |
 | `wait` | `bool` | ✅ Yes | True/False if you want to wait for pathfinding to complete or time out |
 | `timeout` | `int` | ✅ Yes | Seconds to wait before cancelling waiting |
+| `run` | `bool` | ✅ Yes | True/False should we run? |
 
 **Return Type:** `bool`
 
 ---
 
 ### PathfindEntity
-`(entity, distance, wait, timeout)`
+`(entity, distance, wait, timeout, run)`
  Attempt to pathfind to a mobile or item.
  Example:
  ```py
@@ -1560,6 +1678,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `distance` | `int` | ✅ Yes | Distance to stop from goal |
 | `wait` | `bool` | ✅ Yes | True/False if you want to wait for pathfinding to complete or time out |
 | `timeout` | `int` | ✅ Yes | Seconds to wait before cancelling waiting |
+| `run` | `bool` | ✅ Yes | True/False should we run? |
 
 **Return Type:** `bool`
 
@@ -1900,6 +2019,28 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 
 ---
 
+### TargetRel
+`(xOffset, yOffset, tilesOnly)`
+ Target the spot at an offset from your position, resolving it the same way a click would:
+ the topmost visible object there is targeted, whether that is an entity, a static/multi, or land.
+ Example:
+ ```py
+ API.TargetRel(1, 1)
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `xOffset` | `int` | ❌ No | X offset from your position, in tiles. |
+| `yOffset` | `int` | ❌ No | Y offset from your position, in tiles. |
+| `tilesOnly` | `bool` | ✅ Yes | When true (default), entities are ignored and only statics/multi or land are targeted. |
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
 ### TargetLandRel
 `(xOffset, yOffset)`
  Target a land tile relative to your position.
@@ -1922,9 +2063,9 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 ---
 
 ### TargetTileRel
-`(xOffset, yOffset, graphic)`
- Target a tile relative to your location.
- If this doesn't work, try TargetLandRel instead.'
+`(xOffset, yOffset, graphic, tilesOnly)`
+ Target the highest visible object at a tile relative to your location, skipping land.
+ Resolves the spot the same way <see cref="TargetRel"/> does, but never falls back to land.
  Example:
  ```py
  API.TargetTileRel(1, 1)
@@ -1937,7 +2078,8 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | --- | --- | --- | --- |
 | `xOffset` | `int` | ❌ No | X Offset from your position |
 | `yOffset` | `int` | ❌ No | Y Offset from your position |
-| `graphic` | `ushort` | ✅ Yes | Optional graphic, will try to use the graphic of the tile at that location if left empty. |
+| `graphic` | `ushort` | ✅ Yes | Optional graphic, will try to use the graphic of the highest tile at that location if left empty. |
+| `tilesOnly` | `bool` | ✅ Yes | When true (default), entities are ignored and only statics/multi are targeted. |
 
 **Return Type:** `void` *(Does not return anything)*
 
@@ -1980,6 +2122,32 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
    API.SysMsg("Targeting cancelled, april fools made you target something!")
  ```
 
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### SetLastTarget
+`(serial, x, y, z, graphic)`
+ Override the client's last target. Pass a serial for an entity, or a location (x/y/z)
+ for a land tile. Include graphic to mark the location as a static instead.
+ Example:
+ ```py
+ API.SetLastTarget(serial=0x12345678)
+ API.SetLastTarget(x=1243, y=1337, z=0)
+ API.SetLastTarget(x=1243, y=1337, z=0, graphic=0x1)
+ ```
+
+
+**Parameters:**
+
+| Name | Type | Optional | Description |
+| --- | --- | --- | --- |
+| `serial` | `uint?` | ✅ Yes | Serial of the item/mobile to target. Takes precedence over location. |
+| `x` | `ushort?` | ✅ Yes | X coordinate of the target location. |
+| `y` | `ushort?` | ✅ Yes | Y coordinate of the target location. |
+| `z` | `short?` | ✅ Yes | Z coordinate of the target location. |
+| `graphic` | `ushort?` | ✅ Yes | Graphic of the static at the location. Omit to target land. |
 
 **Return Type:** `void` *(Does not return anything)*
 
@@ -2614,7 +2782,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 
 | Name | Type | Optional | Description |
 | --- | --- | --- | --- |
-| `seconds` | `double` | ❌ No | 0-30 seconds. |
+| `seconds` | `double` | ❌ No |  |
 
 **Return Type:** `void` *(Does not return anything)*
 
@@ -2715,7 +2883,33 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 
 | Name | Type | Optional | Description |
 | --- | --- | --- | --- |
-| `virtue` | `string` | ❌ No | honor/sacrifice/valor |
+| `virtue` | `string` | ❌ No | honor/sacrifice/valor/justice |
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### OpenQuestLog
+
+ Open the quest log gump.
+ Example:
+ ```py
+ API.OpenQuestLog()
+ ```
+
+
+**Return Type:** `void` *(Does not return anything)*
+
+---
+
+### OpenHelp
+
+ Open the help menu.
+ Example:
+ ```py
+ API.OpenHelp()
+ ```
+
 
 **Return Type:** `void` *(Does not return anything)*
 
@@ -2842,8 +3036,9 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 ---
 
 ### GetAllMobiles
-`(graphic, distance, notoriety)`
+`(graphic, distance, notoriety, sortby, name, graphics, minDistance, isHuman, isFemale, isGhost, isFriend, poisoned, paralyzed, hasLineOfSight, hues)`
  Return a list of all mobiles the client is aware of, optionally filtered by graphic, distance, and/or notoriety.
+ Any additional filter is ignored unless supplied.
  Example:
  ```py
  # Get all mobiles
@@ -2854,6 +3049,12 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
  nearby_humans = API.GetAllMobiles(400, 5)
  # Get all enemies (murderers and criminals) within 15 tiles
  enemies = API.GetAllMobiles(distance=15, notoriety=[API.Notoriety.Murderer, API.Notoriety.Criminal])
+ # Get all mobiles sorted by current hits, lowest first
+ sorted_by_hits = API.GetAllMobiles(sortby="hits")
+ # Get all poisonous ogres within 10 tiles in line of sight
+ targets = API.GetAllMobiles(name="ogre", distance=10, poisoned=True, hasLineOfSight=True)
+ # Get only dead friends with a specific hue, at least 2 tiles away
+ ghosts = API.GetAllMobiles(isGhost=True, isFriend=True, minDistance=2, hues=[0x83EA])
  ```
 
 
@@ -2864,6 +3065,18 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `graphic` | `ushort?` | ✅ Yes | Optional graphic ID to filter by |
 | `distance` | `int?` | ✅ Yes | Optional maximum distance from player |
 | `notoriety` | `IList<Notoriety>` | ✅ Yes | Optional list of notoriety flags to filter by |
+| `sortby` | `string` | ✅ Yes | Sort order, case insensitive: "Distance", "Hits" or "MaxHits". Defaults to "Distance". |
+| `name` | `string` | ✅ Yes | Optional partial name to match, case insensitive |
+| `graphics` | `ushort[]` | ✅ Yes | Optional list of graphic IDs to match; a mobile matches if its graphic equals any entry |
+| `minDistance` | `int?` | ✅ Yes | Optional minimum distance from player |
+| `isHuman` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) humanoid mobiles |
+| `isFemale` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) female mobiles |
+| `isGhost` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) ghosts (dead mobiles) |
+| `isFriend` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) mobiles on the friends list |
+| `poisoned` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) poisoned mobiles |
+| `paralyzed` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) paralyzed mobiles |
+| `hasLineOfSight` | `bool?` | ✅ Yes | When set, only include (True) or exclude (False) mobiles with line of sight to the player |
+| `hues` | `ushort[]` | ✅ Yes | Optional list of hues to match; a mobile matches if its hue equals any entry |
 
 **Return Type:** `ApiMobile[]`
 
@@ -3240,7 +3453,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 ---
 
 ### CreateGumpTextBox
-`(text, width, height, multiline)`
+`(text, width, height, multiline, fontSize)`
  Use API.Gumps.CreateGumpTextBox instead.
 
 
@@ -3252,6 +3465,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `width` | `int` | ✅ Yes |  |
 | `height` | `int` | ✅ Yes |  |
 | `multiline` | `bool` | ✅ Yes |  |
+| `fontSize` | `float` | ✅ Yes |  |
 
 **Return Type:** `ApiUiTtfTextInputField`
 

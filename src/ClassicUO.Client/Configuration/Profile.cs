@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
+using ClassicUO.Common.Enums;
 using ClassicUO.Configuration.Json;
 using ClassicUO.Game;
 using ClassicUO.Game.Data;
@@ -31,7 +32,8 @@ namespace ClassicUO.Configuration
     public enum NamePlateBackgroundMode
     {
         FixedColor,
-        NotorietyColor
+        NotorietyColor,
+        EntityNotorietyColor
     }
 
     public enum NamePlateHealthBarMode
@@ -56,7 +58,8 @@ namespace ClassicUO.Configuration
         WorldOfWarcraftBlockyBars,
         WorldOfWarcraftCleanHealth,
         WorldOfWarcraftBlockyCast,
-        WorldOfWarcraftRedName
+        WorldOfWarcraftRedName,
+        Legacy
     }
 
     //[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified)]
@@ -87,7 +90,8 @@ namespace ClassicUO.Configuration
 
     public sealed partial class Profile : JsonSave<Profile>, INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
+        internal const string DefaultSystemMessageGlobalChatRegex
+            = @"^\[(?:[01][0-9]|2[0-3]):[0-5][0-9]\] [^:\s\r\n](?:[^:\r\n]*[^:\s\r\n])?: \S(?:[^\r\n]*\S)?$";
 
         private static Profile _defaultPreview;
 
@@ -105,31 +109,6 @@ namespace ClassicUO.Configuration
         /// </summary>
         public static Profile DefaultPreviewProfile => _defaultPreview ??= new Profile();
 
-        /// <summary>
-        /// Raises the <see cref="PropertyChanged"/> event with the specified property name
-        /// </summary>
-        /// <param name="propertyName">The property that was updated. Passed by the compiler.</param>
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
-        /// <summary>
-        /// Updates the given property with the given value if it is different from the current one.
-        /// Raises the <see cref="PropertyChanged" /> event, if a change has occurred
-        /// </summary>
-        /// <param name="storage">The field to update</param>
-        /// <param name="value">The value to set</param>
-        /// <param name="propertyName">The name of the property being updated</param>
-        /// <typeparam name="T">The type of property being updated</typeparam>
-        /// <returns><c>true</c> if a change has occurred, <c>false</c> otherwise</returns>
-        private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(storage, value))
-                return false;
-
-            storage = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
-
         [JsonIgnore] public string Username { get; set => SetProperty(ref field, value); }
         [JsonIgnore] public string ServerName { get; set => SetProperty(ref field, value); }
         [JsonIgnore] public string CharacterName { get; set => SetProperty(ref field, value); }
@@ -140,13 +119,21 @@ namespace ClassicUO.Configuration
         public string VoiceModelPath { get; set => SetProperty(ref field, value); } = string.Empty;
 
         // sounds
+        [Obsolete("Remove after 10/8/26")]
         public bool EnableSound { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/8/26")]
         public int SoundVolume { get; set => SetProperty(ref field, value); } = 50;
+        [Obsolete("Remove after 10/8/26")]
         public bool EnableMusic { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/8/26")]
         public int MusicVolume { get; set => SetProperty(ref field, value); } = 50;
+        [Obsolete("Remove after 10/8/26")]
         public bool EnableFootstepsSound { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/8/26")]
         public bool EnableRainSound { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/8/26")]
         public bool EnableCombatMusic { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/8/26")]
         public bool ReproduceSoundsInBackground { get; set => SetProperty(ref field, value); }
 
         // fonts and speech
@@ -190,7 +177,13 @@ namespace ClassicUO.Configuration
         // visual
         public bool EnabledCriminalActionQuery { get; set => SetProperty(ref field, value); } = true;
         public bool EnabledBeneficialCriminalActionQuery { get; set => SetProperty(ref field, value); }
+        public StatusGumpStyle StatusGumpStyle { get; set => SetProperty(ref field, value); } = StatusGumpStyle.Standard;
+
+        // Retained only for one-time migration of existing profiles to StatusGumpStyle. Do not use in new code.
+        [Obsolete("Remove after 10/27/26.")]
         public bool UseOldStatusGump { get; set => SetProperty(ref field, value); }
+        [Obsolete("Remove after 10/27/26.")]
+        public bool UseVerticalStatusGump { get; set => SetProperty(ref field, value); }
         public bool StatusGumpBarMutuallyExclusive { get; set => SetProperty(ref field, value); } = true;
         public int BackpackStyle { get; set => SetProperty(ref field, value); }
         public bool HighlightGameObjects { get; set => SetProperty(ref field, value); }
@@ -212,9 +205,14 @@ namespace ClassicUO.Configuration
         public bool DisableGargoyleFlyingAnimation { get; set => SetProperty(ref field, value); }
         public int FieldsType { get; set => SetProperty(ref field, value); } // 0 = normal, 1 = static, 2 = tile
         public bool NoColorObjectsOutOfRange { get; set => SetProperty(ref field, value); }
+
+        [Obsolete("Remove after 10/8/26")]
         public bool UseCircleOfTransparency { get; set => SetProperty(ref field, value); }
+        [Obsolete("Remove after 10/8/26")]
         public int CircleOfTransparencyRadius { get; set => SetProperty(ref field, value); } = Constants.MAX_CIRCLE_OF_TRANSPARENCY_RADIUS / 2;
+        [Obsolete("Remove after 10/8/26")]
         public int CircleOfTransparencyType { get; set => SetProperty(ref field, value); } // 0 = normal, 1 = like original client
+
         public int VendorGumpHeight { get; set => SetProperty(ref field, value); } = 350;   //original vendor gump size
         public float DefaultScale { get; set => SetProperty(ref field, value); } = 1.0f;
         public bool EnableMousewheelScaleZoom { get; set => SetProperty(ref field, value); } = true;
@@ -236,6 +234,10 @@ namespace ClassicUO.Configuration
         public bool BandageAgentBandagePets { get; set => SetProperty(ref field, value); } = false;
         public bool BandageAgentUseDexFormula { get; set => SetProperty(ref field, value); } = false;
         public bool BandageAgentDisableSelfHeal { get; set => SetProperty(ref field, value); } = false;
+        public TargetType BandageAgentTargetType { get; set => SetProperty(ref field, value); } = TargetType.Beneficial;
+        public bool BandageAgentUseSelfCommand { get; set => SetProperty(ref field, value); } = false;
+        public string BandageAgentSelfCommand { get; set => SetProperty(ref field, value); } = ".bandage";
+        public bool BandageAgentSelfCommandExpectTarget { get; set => SetProperty(ref field, value); } = false;
         public bool SelfHeal_Enabled { get; set => SetProperty(ref field, value); } = false;
         public bool SelfHeal_UseChivalry { get; set => SetProperty(ref field, value); } = false; // false = Magery (Heal/Cure), true = Chivalry (Close Wounds/Cleanse by Fire)
         public int SelfHeal_FC { get; set => SetProperty(ref field, value); } = 2;   // Faster Casting (used to auto-compute timings)
@@ -310,15 +312,16 @@ namespace ClassicUO.Configuration
         public bool OpenModernPaperdollAtMinimizeLoc { get; set => SetProperty(ref field, value); } = false;
 
         // Experimental
+        [Obsolete("Remove after 10/12/26")]
         public bool CastSpellsByOneClick { get; set => SetProperty(ref field, value); }
         public bool BuffBarTime { get; set => SetProperty(ref field, value); }
         public bool FastSpellsAssign { get; set => SetProperty(ref field, value); }
         public bool AutoOpenDoors { get; set => SetProperty(ref field, value); } = true;
+        public bool BlockDoorMovement { get; set => SetProperty(ref field, value); } = true;
         public bool SmoothDoors { get; set => SetProperty(ref field, value); } = true;
         public bool AutoOpenCorpses { get; set => SetProperty(ref field, value); } = true;
         public int AutoOpenCorpseRange { get; set => SetProperty(ref field, value); } = 2;
         public int CorpseOpenOptions { get; set => SetProperty(ref field, value); } = 3;
-        public bool SkipEmptyCorpse { get; set => SetProperty(ref field, value); }
         public bool AutoOpenOwnCorpse { get; set => SetProperty(ref field, value); } = true;
         public bool DisableDefaultHotkeys { get; set => SetProperty(ref field, value); }
         public bool DisableArrowBtn { get; set => SetProperty(ref field, value); }
@@ -348,6 +351,7 @@ namespace ClassicUO.Configuration
         public bool UsePartyHealthBars { get; set => SetProperty(ref field, value); } = true;
         public bool ShowHealCureButtonsAllHealthbars { get; set => SetProperty(ref field, value); }
         public bool ShowHealCureButtonsFriends { get; set => SetProperty(ref field, value); }
+        public bool ShowHealCureButtonsPets { get; set => SetProperty(ref field, value); } = true;
 
         public bool ShowInfoBar { get; set => SetProperty(ref field, value); }
         public int InfoBarHighlightType { get; set => SetProperty(ref field, value); } // 0 = text colour changes, 1 = underline
@@ -484,6 +488,8 @@ namespace ClassicUO.Configuration
         public bool NamePlateShowWordOfDeathIcon { get; set => SetProperty(ref field, value); }
         public int NamePlateHeight { get; set => SetProperty(ref field, Math.Clamp(value, 0, 80)); }
         public bool NamePlateSplitHealthBar { get; set => SetProperty(ref field, value); }
+        public bool NamePlateUseNotorietyText { get; set => SetProperty(ref field, value); }
+        public bool NamePlateShowMissingHealth { get; set => SetProperty(ref field, value); } = true;
         public int NamePlateCornerRadius { get; set => SetProperty(ref field, Math.Clamp(value, 0, 40)); } = 0;
         public NamePlateHealthBarMode NamePlateHealthBarMode { get; set => SetProperty(ref field, value); } = NamePlateHealthBarMode.StatusColor;
         public NamePlateBackgroundMode NamePlateBackgroundMode { get; set => SetProperty(ref field, value); } = NamePlateBackgroundMode.FixedColor;
@@ -491,6 +497,7 @@ namespace ClassicUO.Configuration
         public byte NamePlateBackgroundG { get; set => SetProperty(ref field, value); }
         public byte NamePlateBackgroundB { get; set => SetProperty(ref field, value); }
         public NamePlatePreset NamePlatePreset { get; set => SetProperty(ref field, value); } = NamePlatePreset.Custom;
+        public string NamePlateSavedPresetName { get; set => SetProperty(ref field, value); } = string.Empty;
 
         public bool LeftAlignToolTips { get; set => SetProperty(ref field, value); }
         public bool ForceCenterAlignTooltipMobiles { get; set => SetProperty(ref field, value); } = true;
@@ -683,6 +690,7 @@ namespace ClassicUO.Configuration
 
         public int TextBorderSize { get; set => SetProperty(ref field, value); } = 1;
         public uint SavedMountSerial { get; set => SetProperty(ref field, value); } = 0;
+        public int MountDistance { get; set => SetProperty(ref field, value); } = 1;
 
         public uint SavedMainHandSerial { get; set => SetProperty(ref field, value); } = 0;
         public uint SavedOffHandSerial { get; set => SetProperty(ref field, value); } = 0;
@@ -693,8 +701,14 @@ namespace ClassicUO.Configuration
         public int MaxSoundEntries { get; set => SetProperty(ref field, value); } = 250;
         public bool HideJournalBorder { get; set => SetProperty(ref field, value); } = false;
         public bool JournalTransparencyWhenInactive { get; set => SetProperty(ref field, value); } = false;
+        [Obsolete("Remove on/after 10/17/26")]
         public bool HideJournalTimestamp { get; set => SetProperty(ref field, value); } = false;
         public bool HideJournalSystemPrefix { get; set => SetProperty(ref field, value); } = false;
+
+        public bool ClassifySystemMessagesAsGlobalChat { get; set => SetProperty(ref field, value); } = false;
+
+        public string SystemMessageGlobalChatRegex { get; set => SetProperty(ref field, value); }
+            = DefaultSystemMessageGlobalChatRegex;
 
         public int HealthLineSizeMultiplier { get; set => SetProperty(ref field, value); } = 1;
 
@@ -708,29 +722,6 @@ namespace ClassicUO.Configuration
         public int AdvancedSkillsGumpHeight { get; set => SetProperty(ref field, value); } = 510;
 
         #region ToolTip Overrides
-        // The ToolTipOverride_* parallel lists below are the legacy tooltip-override storage. They have been
-        // superseded by tooltip_overrides.json (see TooltipOverridesConfig) and are retained only so existing
-        // profiles can be migrated on load. Do not use them in new code. The defaults are kept so a fresh
-        // profile still migrates the standard resist/damage overrides into the new file.
-        private const string TooltipOverrideMigratedMessage = "Migrated to tooltip_overrides.json (TooltipOverridesConfig); retained only for one-time migration of existing profiles.";
-
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<string> ToolTipOverride_SearchText { get; set => SetProperty(ref field, value); } = new List<string>() { "Physical Res", "Fire Resist", "Cold Resist", "Poison Resist", "Energy Resist", "Weapon Damage" };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<string> ToolTipOverride_NewFormat { get; set => SetProperty(ref field, value); } = new List<string>() { "/c[#8c733e]Physical Resist {1}%", "/c[red]Fire Resist {1}%", "/c[teal]Cold Resist {1}%", "/c[green]Poison Resist {1}%", "/c[purple]Energy Resist {1}%", "{0} /c[orange]{1}{4} /cd- /c[red]{2}{5}" };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<int> ToolTipOverride_MinVal1 { get; set => SetProperty(ref field, value); } = new List<int>() { -1, -1, -1, -1, -1, -1 };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<int> ToolTipOverride_MinVal2 { get; set => SetProperty(ref field, value); } = new List<int>() { -1, -1, -1, -1, -1, -1 };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<int> ToolTipOverride_MaxVal1 { get; set => SetProperty(ref field, value); } = new List<int>() { 100, 100, 100, 100, 100, 100 };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<int> ToolTipOverride_MaxVal2 { get; set => SetProperty(ref field, value); } = new List<int>() { 100, 100, 100, 100, 100, 100 };
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<byte> ToolTipOverride_Layer { get; set => SetProperty(ref field, value); } = new List<byte>() { (byte)TooltipLayers.Any, (byte)TooltipLayers.Any, (byte)TooltipLayers.Any, (byte)TooltipLayers.Any, (byte)TooltipLayers.Any, (byte)TooltipLayers.Any };
-        /// <summary>Optional per-override border hue drawn around the tooltip when the rule matches; -1 means no override.</summary>
-        [Obsolete(TooltipOverrideMigratedMessage)]
-        public List<int> ToolTipOverride_BorderHue { get; set => SetProperty(ref field, value); } = new List<int>() { -1, -1, -1, -1, -1, -1 };
         /// <summary>When enabled, tooltip overrides are not applied to mobile tooltips.</summary>
         public bool ToolTipOverride_IgnoreMobiles { get; set => SetProperty(ref field, value); } = true;
         #endregion
@@ -746,7 +737,7 @@ namespace ClassicUO.Configuration
         public bool AutoLootHumanCorpses { get; set => SetProperty(ref field, value); } = false;
         public bool EnableAutoSkinning { get; set => SetProperty(ref field, value); } = false;
         public bool AutoSkinningHumanCorpses { get; set => SetProperty(ref field, value); } = false;
-        public string AutoSkinningKnifeGraphics { get; set => SetProperty(ref field, value); } = "0x2D2C;0x0F52;0x0EC4;0x0EC3;0x13F6;0x13B6";
+        public string AutoSkinningKnifeGraphics { get; set => SetProperty(ref field, value); }
         public bool ItemDatabaseEnabled { get; set => SetProperty(ref field, value); } = true;
         public static uint GumpsVersion { get; private set; }
 
@@ -826,6 +817,11 @@ namespace ClassicUO.Configuration
         public bool DisableTargetingGridContainers { get; set => SetProperty(ref field, value); }
         public bool ControllerEnabled { get; set => SetProperty(ref field, value); } = true;
         public bool EnableScavenger { get; set => SetProperty(ref field, value); } = true;
+        public string ScavengerSelectedListUid { get; set => SetProperty(ref field, value); } = "";
+        /// <summary>
+        /// Determines whether the Scavanger Agent will attempt to ignore locked-down/secured items
+        /// </summary>
+        public bool ScavengerSkipLockedDown { get; set => SetProperty(ref field, value); } = true;
         public bool CounterGumpLocked { get; set => SetProperty(ref field, value); }
         public bool NearbyLootConcealsContainerOnOpen { get; set => SetProperty(ref field, value); } = true;
         public bool SpellBar_ShowHotkeys { get; set => SetProperty(ref field, value); } = true;
@@ -848,11 +844,13 @@ namespace ClassicUO.Configuration
         public bool ModernPaperdollAnchorEnabled { get; set => SetProperty(ref field, value); }
         public bool JournalAnchorEnabled { get; set => SetProperty(ref field, value); } = false;
         public bool EnableAutoLootProgressBar { get; set => SetProperty(ref field, value); } = true;
+        [Obsolete("Remove after 10/12/26")]
         public bool UseWASDInsteadArrowKeys { get; set => SetProperty(ref field, value); }
         public int NearbyLootGumpHeight { get; set => SetProperty(ref field, value); } = 550;
         public bool ForceTooltipsOnOldClients { get; set => SetProperty(ref field, value); } = true;
         public bool NearbyLootOpensHumanCorpses { get; set => SetProperty(ref field, value); }
-        public ushort TurnDelay { get; set => SetProperty(ref field, value); } = 100;
+        [Obsolete("Remove after 10/12/26")]
+        public ushort TurnDelay { get; set => SetProperty(ref field, value); } = 80;
         public bool SellAgentEnabled { get; set => SetProperty(ref field, value); }
         public int SellAgentMaxUniques { get; set => SetProperty(ref field, value); } = 50;
         public int SellAgentMaxItems { get; set => SetProperty(ref field, value); } = 0;
@@ -874,6 +872,7 @@ namespace ClassicUO.Configuration
         public bool StripChatUsernameId { get; set; }
         public bool OverheadsScaleWithZoom { get; set; } = true;
         public string VotedPolls { get; set; }
+        public AutoStatLockState AutoStatLockState { get; set => SetProperty(ref field, value); } = new();
         public string BandageAgentJournalMessages { get; set; } = "You apply the bandages;You finish applying;You heal what little;You have been cured;You failed to cure;Your fingers slip";
         public bool BandageAgentUseJournalTrigger { get; set; }
         public bool CounterBarDisableIconScaling { get; set; }
@@ -898,8 +897,9 @@ namespace ClassicUO.Configuration
         public bool EnablePetScaling { get; set; }
         public bool AutoUnequipForActions { get; set; }
         public int MinGumpMoveDistance { get; set; } = 5;
-        public int QuickHealSpell { get; set; } = 29;
-        public int QuickCureSpell { get; set; } = 11;
+        public HealthBarQuickAction QuickHealAction { get; set; } = HealthBarQuickAction.Heal;
+        public HealthBarQuickAction QuickCureAction { get; set; } = HealthBarQuickAction.Cure;
+        [JsonConverter(typeof(Point2Converter))] public Point CoprseContainerPosition { get; set => SetProperty(ref field, value); } = new Point(100, 100);
 
 
         private long lastSave;
@@ -938,16 +938,9 @@ namespace ClassicUO.Configuration
 
         private void HandleMigration()
         {
-            if (ProfileMigrationVersion < 4) //3
-            {
-                MigrateToolTipOverrides();
-
-                ProfileMigrationVersion = 4;
-            }
-
             if (ProfileMigrationVersion < 5) //4
             {
-                ProfileMigrationVersion++;
+                ProfileMigrationVersion = 5;
             }
 
             if (ProfileMigrationVersion < 6)
@@ -989,12 +982,94 @@ namespace ClassicUO.Configuration
                 EnablePetScaling = OldEnablePetScaling;
                 AutoUnequipForActions = OldAutoUnequipForActions;
                 MinGumpMoveDistance = OldMinGumpMoveDistance;
-                QuickHealSpell = OldQuickHealSpell;
-                QuickCureSpell = OldQuickCureSpell;
                 WebMapServerPort = OldWebMapServerPort;
                 WebMapAutoStart = OldWebMapAutoStart;
 
-                ProfileMigrationVersion++;
+                ProfileMigrationVersion = 6;
+            }
+
+            if (ProfileMigrationVersion < 7)
+            {
+                ProfileManager.GlobalSettings.UseCircleOfTransparency = UseCircleOfTransparency;
+                ProfileManager.GlobalSettings.CircleOfTransparencyRadius = CircleOfTransparencyRadius;
+                ProfileManager.GlobalSettings.CircleOfTransparencyType = CircleOfTransparencyType;
+
+                ProfileMigrationVersion = 7;
+            }
+
+            if (ProfileMigrationVersion < 8)
+            {
+                ProfileManager.GlobalSettings.EnableSound = EnableSound;
+                ProfileManager.GlobalSettings.SoundVolume = SoundVolume;
+                ProfileManager.GlobalSettings.EnableMusic = EnableMusic;
+                ProfileManager.GlobalSettings.MusicVolume = MusicVolume;
+                ProfileManager.GlobalSettings.EnableFootstepsSound = EnableFootstepsSound;
+                ProfileManager.GlobalSettings.EnableRainSound = EnableRainSound;
+                ProfileManager.GlobalSettings.EnableCombatMusic = EnableCombatMusic;
+                ProfileManager.GlobalSettings.ReproduceSoundsInBackground = ReproduceSoundsInBackground;
+
+                ProfileMigrationVersion = 8;
+            }
+
+            if (ProfileMigrationVersion < 9)
+            {
+                ProfileManager.GlobalSettings.EnableSound = EnableSound;
+                ProfileManager.GlobalSettings.SoundVolume = SoundVolume;
+                ProfileManager.GlobalSettings.EnableMusic = EnableMusic;
+                ProfileManager.GlobalSettings.MusicVolume = MusicVolume;
+                ProfileManager.GlobalSettings.EnableFootstepsSound = EnableFootstepsSound;
+                ProfileManager.GlobalSettings.EnableRainSound = EnableRainSound;
+                ProfileManager.GlobalSettings.EnableCombatMusic = EnableCombatMusic;
+                ProfileManager.GlobalSettings.ReproduceSoundsInBackground = ReproduceSoundsInBackground;
+
+                ProfileMigrationVersion = 9;
+            }
+
+            if (ProfileMigrationVersion < 10)
+            {
+                ProfileManager.GlobalSettings.UseWASDInsteadArrowKeys = UseWASDInsteadArrowKeys;
+                ProfileManager.GlobalSettings.SingleClickIconUse = CastSpellsByOneClick;
+                ProfileManager.ServerSettings.TurnDelay = TurnDelay;
+
+                ProfileMigrationVersion = 10;
+            }
+
+            if (ProfileMigrationVersion < 11)
+            {
+                ProfileManager.GlobalSettings.HideJournalTimestamp = HideJournalTimestamp;
+
+                ProfileMigrationVersion = 11;
+            }
+
+            if (ProfileMigrationVersion < 12)
+            {
+#pragma warning disable CS0618
+                if (UseOldStatusGump)
+                    StatusGumpStyle = StatusGumpStyle.Old;
+                else if (UseVerticalStatusGump)
+                    StatusGumpStyle = StatusGumpStyle.ModernVertical;
+#pragma warning restore CS0618
+
+                ProfileMigrationVersion = 12;
+            }
+
+            if (ProfileMigrationVersion < 13)
+            {
+#pragma warning disable CS0618
+                if (!string.IsNullOrWhiteSpace(OldAutoStatLockJson))
+                {
+                    try
+                    {
+                        AutoStatLockState = JsonSerializer.Deserialize(OldAutoStatLockJson, AutoStatLockStateContext.Default.AutoStatLockState) ?? new AutoStatLockState();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"Failed to migrate legacy auto stat lock state: {ex.Message}");
+                    }
+                }
+#pragma warning restore CS0618
+
+                ProfileMigrationVersion = 13;
             }
 
             try //Cleanup old backups from previous save system
@@ -1024,51 +1099,6 @@ namespace ClassicUO.Configuration
             {}
         }
 
-        /// <summary>
-        /// Moves the legacy parallel <c>ToolTipOverride_*</c> lists into the dedicated
-        /// tooltip_overrides.json (see <see cref="TooltipOverridesConfig"/>) and clears them. The config
-        /// list is rebuilt (not appended) so re-running the migration - e.g. if the profile isn't saved
-        /// before the next launch - stays idempotent.
-        /// </summary>
-#pragma warning disable CS0618 // Reading the obsolete legacy lists is the whole point of migration.
-        private void MigrateToolTipOverrides()
-        {
-            int count = ToolTipOverride_SearchText.Count;
-            if (count == 0)
-                return;
-
-            var overrides = new List<ToolTipOverrideData>(count);
-
-            for (int i = 0; i < count; i++)
-            {
-                overrides.Add(new ToolTipOverrideData(
-                    i,
-                    ToolTipOverride_SearchText[i],
-                    ToolTipOverride_NewFormat.ElementAtOrDefault(i) ?? string.Empty,
-                    i < ToolTipOverride_MinVal1.Count ? ToolTipOverride_MinVal1[i] : -1,
-                    i < ToolTipOverride_MaxVal1.Count ? ToolTipOverride_MaxVal1[i] : 100,
-                    i < ToolTipOverride_MinVal2.Count ? ToolTipOverride_MinVal2[i] : -1,
-                    i < ToolTipOverride_MaxVal2.Count ? ToolTipOverride_MaxVal2[i] : 100,
-                    i < ToolTipOverride_Layer.Count ? ToolTipOverride_Layer[i] : (byte)TooltipLayers.Any,
-                    i < ToolTipOverride_BorderHue.Count ? ToolTipOverride_BorderHue[i] : -1));
-            }
-
-            TooltipOverridesConfig config = TooltipOverridesConfig.Current;
-            config.Overrides = overrides;
-            config.Save();
-
-            // Clear the legacy lists so tooltip overrides live only in tooltip_overrides.json going forward.
-            ToolTipOverride_SearchText.Clear();
-            ToolTipOverride_NewFormat.Clear();
-            ToolTipOverride_MinVal1.Clear();
-            ToolTipOverride_MinVal2.Clear();
-            ToolTipOverride_MaxVal1.Clear();
-            ToolTipOverride_MaxVal2.Clear();
-            ToolTipOverride_Layer.Clear();
-            ToolTipOverride_BorderHue.Clear();
-        }
-#pragma warning restore CS0618
-
         internal void Save(World world, string path, bool saveGumps = true)
         {
             if (Time.Ticks - lastSave < 10) //Don't save if saved in the last 10 ms, prevent duplcate saving when exiting game with options menu open
@@ -1082,7 +1112,12 @@ namespace ClassicUO.Configuration
             // Grid highlights live in a separate grid_highlights.json (see GridHighlightsConfig); persist
             // them alongside the profile so in-place rule edits are saved on the same cadence as before.
             if (ReferenceEquals(this, ProfileManager.CurrentProfile))
+            {
                 GridHighlightsConfig.Current.Save();
+
+                // Same arrangement for the screen decoration settings and their overlay profiles.
+                FeatureConfigs.ScreenDecorations.ScreenDecorations.Current.Save();
+            }
 
             // Save opened gumps
             if (saveGumps)
@@ -1100,6 +1135,22 @@ namespace ClassicUO.Configuration
         {
             string gumpsXmlPath = Path.Combine(path, "gumps.xml");
 
+            try
+            {
+                WriteGumpsXml(world, gumpsXmlPath);
+            }
+            catch (Exception e)
+            {
+                // Never let a gump save failure crash the client on its way out.
+                Log.Error($"Failed to save gumps '{gumpsXmlPath}': {e.Message}");
+                return;
+            }
+
+            world.SkillsGroupManager.Save();
+        }
+
+        private static void WriteGumpsXml(World world, string gumpsXmlPath)
+        {
             using (var xml = new XmlTextWriter(gumpsXmlPath, Encoding.UTF8)
             {
                 Formatting = Formatting.Indented,
@@ -1188,9 +1239,6 @@ namespace ClassicUO.Configuration
                 xml.WriteEndElement();
                 xml.WriteEndDocument();
             }
-
-
-            world.SkillsGroupManager.Save();
         }
 
         private static void SaveItemsGumpRecursive(Item parent, XmlTextWriter xml, LinkedList<Gump> list)
@@ -1331,6 +1379,11 @@ namespace ClassicUO.Configuration
 
                                     break;
 
+                                case GumpType.ActionBar:
+                                    gump = new ActionBarGump(world);
+
+                                    break;
+
                                 case GumpType.HealthBar:
                                     if (CustomBarsToggled)
                                     {
@@ -1350,6 +1403,11 @@ namespace ClassicUO.Configuration
 
                                 case GumpType.Journal:
                                     gump = new ResizableJournal(world);
+
+                                    break;
+
+                                case GumpType.OldJournal:
+                                    gump = new JournalGump(world);
 
                                     break;
 
@@ -1622,6 +1680,9 @@ namespace ClassicUO.Configuration
                                         break;
                                     case GumpType.PaperDoll:
                                         gump = new ModernPaperdoll(world, world.Player.Serial);
+                                        break;
+                                    case GumpType.HealthBarCollector:
+                                        gump = new HealthbarCollectorGump(world);
                                         break;
                                 }
 

@@ -11,6 +11,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml;
 using ClassicUO.Game.UI.Gumps.GridHighLight;
 using ClassicUO.Utility;
@@ -84,6 +85,7 @@ public partial class GridContainer : ResizableGump
         public bool? UseOldContainerStyle;
         private bool _autoSortContainer;
         private bool _bandsDisabledForContainer;
+        private bool _highlightsDisabledForContainer;
         private GridSortMode _sortMode = GridSortMode.GraphicAndHue;
 
         private readonly bool _skipSave;
@@ -132,6 +134,9 @@ public partial class GridContainer : ResizableGump
 
         /// <summary>Per-container override that disables band layout for this container even when bands are enabled globally.</summary>
         public bool BandsDisabledForContainer => _bandsDisabledForContainer;
+
+        /// <summary>Per-container override that suppresses grid-highlight rules in this container.</summary>
+        public bool HighlightsDisabledForContainer => _highlightsDisabledForContainer;
 
         public GridSortMode SortMode => _sortMode;
         public readonly GridSlotManager SlotManager;
@@ -250,19 +255,20 @@ public partial class GridContainer : ResizableGump
             if (useGridStyle != null)
                 UseOldContainerStyle = !useGridStyle;
 
-            IsPlayerBackpack = LocalSerial == World.Player.Backpack.Serial;
+            IsPlayerBackpack = LocalSerial == World.Player?.Backpack?.Serial;
 
             _gridContainerEntry = GridContainerSaveData.Instance.GetContainer(local);
 
             _autoSortContainer = _gridContainerEntry.AutoSort;
             _bandsDisabledForContainer = _gridContainerEntry.BandsDisabled;
+            _highlightsDisabledForContainer = _gridContainerEntry.HighlightsDisabled;
             StackNonStackableItems = _gridContainerEntry.VisuallyStackNonStackables;
             _sortMode = (GridSortMode)_gridContainerEntry.SortMode;
 
             // Load minimized state from save data
             bool loadMinimized = _gridContainerEntry.IsMinimized;
 
-            Point lastPos = IsPlayerBackpack ? ProfileManager.CurrentProfile.BackpackGridPosition : _gridContainerEntry.GetPositionForState(loadMinimized);
+            Point lastPos = IsPlayerBackpack ? ProfileManager.CurrentProfile.BackpackGridPosition : _isCorpse ? ProfileManager.CurrentProfile.CoprseContainerPosition : _gridContainerEntry.GetPositionForState(loadMinimized);
             if (lastPos == Point.Zero || (lastPos.X == 100 && lastPos.Y == 100)) //Default positions, use last static position
             {
                 lastPos.X = _lastX;
@@ -281,19 +287,20 @@ public partial class GridContainer : ResizableGump
             _lastWidth = Width = savedSize.X;
             _lastHeight = Height = savedSize.Y;
 
-            X = _isCorpse ? _lastCorpseX : _lastX = lastPos.X;
-            Y = _isCorpse ? _lastCorpseY : _lastY = lastPos.Y;
+            if (_isCorpse)
+            {
+                X = _lastCorpseX = lastPos.X;
+                Y = _lastCorpseY = lastPos.Y;
+            }
+            else
+            {
+                X = _lastX = lastPos.X;
+                Y = _lastY = lastPos.Y;
+            }
 
             if (_isCorpse)
             {
-                World.Player.ManualOpenedCorpses.Remove(LocalSerial);
-
-                if (World.Player.AutoOpenedCorpses.Contains(LocalSerial) && ProfileManager.CurrentProfile != null && ProfileManager.CurrentProfile.SkipEmptyCorpse && Container.IsEmpty)
-                {
-                    IsVisible = false;
-                    Dispose();
-            return;
-                }
+                World.Player?.ManualOpenedCorpses.Remove(LocalSerial);
             }
 
             AnchorType = ProfileManager.CurrentProfile.EnableGridContainerAnchor ? ANCHOR_TYPE.NONE : ANCHOR_TYPE.DISABLED;
@@ -406,6 +413,9 @@ public partial class GridContainer : ResizableGump
             {
                 if (e.Button == MouseButtonType.Left)
                 {
+                    // Rebuild every open so content-driven entries (item layers/graphics)
+                    // reflect the container's current contents.
+                    _openRegularGump.ContextMenu = GenContextMenu();
                     _openRegularGump.ContextMenu?.Show();
                 }
             };
@@ -418,7 +428,7 @@ public partial class GridContainer : ResizableGump
                 "Alt + Double Click to select all similar items\n" +
                 "Shift + Click to add an item to your auto loot list\n" +
                 "Sort and single click looting can be enabled with the icons on the right side"));
-            _quickDropBackpack = new ResizableStaticPic(World.Player.Backpack.DisplayedGraphic, 20, 20)
+            _quickDropBackpack = new ResizableStaticPic(World.Player?.Backpack?.DisplayedGraphic ?? 0, 20, 20)
             {
                 X = Width - _openRegularGump.Width - 20 - _borderWidth,
                 Y = _borderWidth
@@ -683,7 +693,15 @@ public partial class GridContainer : ResizableGump
                 RequestUpdateContents();
             }, true, _bandsDisabledForContainer));
 
-            if (Container != World.Player.Backpack)
+            control.Add(new ContextMenuItemEntry(TazLang.Get("gridcontainer_disablehighlights", "Disable Highlights for This Container"), () =>
+            {
+                _highlightsDisabledForContainer = !_highlightsDisabledForContainer;
+                _gridContainerEntry.HighlightsDisabled = _highlightsDisabledForContainer;
+                _gridContainerEntry.UpdateSaveDataEntry(this);
+                _openRegularGump.ContextMenu = GenContextMenu();
+            }, true, _highlightsDisabledForContainer));
+
+            if (Container != World.Player?.Backpack)
             {
                 control.Add(new ContextMenuItemEntry(TazLang.Get("gridcontainer_autolootthis", "Autoloot this container"), () =>
                 {
@@ -693,6 +711,23 @@ public partial class GridContainer : ResizableGump
 
             // Re-applies highlight rules and colors; useful if item highlights desync after SOS loot or container refresh.
             control.Add(new ContextMenuItemEntry(TazLang.Get("gridcontainer_refreshhighlights", "Refresh item highlights"), GridHighlightData.RecheckMatchStatus));
+
+            var multiMoveMenu = new ContextMenuItemEntry(TazLang.Get("gridcontainer_multimove", "Multi Move"));
+            multiMoveMenu.Add(new ContextMenuItemEntry(TazLang.Get("gridcontainer_multimove_selectall", "Select all"), () => SelectItemsForMultiMove(_ => true)));
+
+            var selectByLayer = new ContextMenuItemEntry(TazLang.Get("gridcontainer_multimove_selectbylayer", "Select by layer"));
+            PopulateMultiMoveLayerEntries(selectByLayer);
+            multiMoveMenu.Add(selectByLayer);
+
+            var selectByGraphic = new ContextMenuItemEntry(TazLang.Get("gridcontainer_multimove_selectbygraphic", "Select by graphic"));
+            PopulateMultiMoveGraphicEntries(selectByGraphic);
+            multiMoveMenu.Add(selectByGraphic);
+
+            var selectByName = new ContextMenuItemEntry(TazLang.Get("gridcontainer_multimove_selectbyname", "Select by name"));
+            PopulateMultiMoveNameEntries(selectByName);
+            multiMoveMenu.Add(selectByName);
+
+            control.Add(multiMoveMenu);
 
             control.Add(new ContextMenuItemEntry(TazLang.Get("gridcontainer_renamecontainer", "Rename container"), () =>
             {
@@ -743,6 +778,150 @@ public partial class GridContainer : ResizableGump
 
             return control;
         }
+
+        /// <summary>
+        /// Selects the items currently displayed in this container that match <paramref name="predicate"/>
+        /// for the multi-move system, then reveals the multi-move gump.
+        /// </summary>
+        private void SelectItemsForMultiMove(Func<Item, bool> predicate)
+        {
+            bool selected = false;
+
+            foreach (GridItem gridItem in SlotManager.GridSlots.Values)
+            {
+                Item item = gridItem.SlotItem;
+
+                if (item == null || !predicate(item))
+                    continue;
+
+                if (gridItem.SelectForMultiMove())
+                    selected = true;
+            }
+
+            if (selected)
+                MultiItemMoveGump.ShowNextTo(this);
+        }
+
+        /// <summary>
+        /// The layer used to categorize an item for multi-move layer selection. Container items have no
+        /// live layer, so the item graphic's equip slot from tiledata is used instead.
+        /// </summary>
+        private static Layer GetItemMultiMoveLayer(Item item) => (Layer)item.ItemData.Layer;
+
+        /// <summary>Adds one entry per item layer present in this container to <paramref name="parent"/>.</summary>
+        private void PopulateMultiMoveLayerEntries(ContextMenuItemEntry parent)
+        {
+            // GenContextMenu is first built in BuildTopBar, before SlotManager exists.
+            if (SlotManager == null)
+                return;
+
+            var layers = new HashSet<Layer>();
+
+            foreach (GridItem gridItem in SlotManager.GridSlots.Values)
+            {
+                Item item = gridItem.SlotItem;
+
+                if (item == null)
+                    continue;
+
+                Layer layer = GetItemMultiMoveLayer(item);
+                if (layer != Layer.Invalid)
+                    layers.Add(layer);
+            }
+
+            foreach (Layer layer in layers.OrderBy(l => l))
+            {
+                parent.Add(new ContextMenuItemEntry(GetLayerName(layer), () => SelectItemsForMultiMove(item => GetItemMultiMoveLayer(item) == layer)));
+            }
+        }
+
+        /// <summary>Adds one entry per item graphic present in this container to <paramref name="parent"/>.</summary>
+        private void PopulateMultiMoveGraphicEntries(ContextMenuItemEntry parent)
+        {
+            // GenContextMenu is first built in BuildTopBar, before SlotManager exists.
+            if (SlotManager == null)
+                return;
+
+            var graphics = new HashSet<ushort>();
+
+            foreach (GridItem gridItem in SlotManager.GridSlots.Values)
+            {
+                Item item = gridItem.SlotItem;
+                if (item != null)
+                    graphics.Add(item.Graphic);
+            }
+
+            foreach (ushort graphic in graphics.OrderBy(g => g))
+            {
+                parent.Add(new ContextMenuItemEntry($"0x{graphic:X4}", () => SelectItemsForMultiMove(item => item.Graphic == graphic))
+                {
+                    ArtGraphic = graphic
+                });
+            }
+        }
+
+        /// <summary>Adds one entry per distinct item name present in this container to <paramref name="parent"/>.</summary>
+        private void PopulateMultiMoveNameEntries(ContextMenuItemEntry parent)
+        {
+            // GenContextMenu is first built in BuildTopBar, before SlotManager exists.
+            if (SlotManager == null)
+                return;
+
+            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (GridItem gridItem in SlotManager.GridSlots.Values)
+            {
+                Item item = gridItem.SlotItem;
+                if (item == null)
+                    continue;
+
+                string name = item.GetNormalizedName(false);
+                if (string.IsNullOrEmpty(name))
+                    continue;
+
+                if (!names.ContainsKey(name))
+                    names[name] = name;
+            }
+
+            foreach (string name in names.Values.OrderBy(n => n))
+            {
+                parent.Add(new ContextMenuItemEntry(name, () => SelectItemsForMultiMove(item => string.Equals(name, item.GetNormalizedName(false), StringComparison.OrdinalIgnoreCase)))
+                {
+                    IsHtml = true
+                });
+            }
+        }
+
+        private static string GetLayerName(Layer layer) =>
+            _layerNames.TryGetValue(layer, out string name) ? name : layer.ToString();
+
+        private static readonly Dictionary<Layer, string> _layerNames = new()
+        {
+            { Layer.OneHanded, "One-Handed" },
+            { Layer.TwoHanded, "Two-Handed" },
+            { Layer.Shoes, "Shoes" },
+            { Layer.Pants, "Pants" },
+            { Layer.Shirt, "Shirt" },
+            { Layer.Helmet, "Helmet" },
+            { Layer.Gloves, "Gloves" },
+            { Layer.Ring, "Ring" },
+            { Layer.Talisman, "Talisman" },
+            { Layer.Neck, "Necklace" },
+            { Layer.Waist, "Waist" },
+            { Layer.Torso, "Torso" },
+            { Layer.Bracelet, "Bracelet" },
+            { Layer.Face, "Face" },
+            { Layer.Tunic, "Tunic" },
+            { Layer.Earrings, "Earrings" },
+            { Layer.Arms, "Arms" },
+            { Layer.Cloak, "Cloak" },
+            { Layer.Backpack, "Backpack" },
+            { Layer.Robe, "Robe" },
+            { Layer.Skirt, "Skirt" },
+            { Layer.Legs, "Legs" },
+            { Layer.Mount, "Mount" }
+        };
+
         /// <summary>
         /// Border width implied by the profile's current border style. Used by the static size
         /// helpers, which run before an instance exists and so can't read <see cref="_borderWidth"/>.
@@ -800,6 +979,10 @@ public partial class GridContainer : ResizableGump
             {
                 ProfileManager.CurrentProfile.BackpackGridPosition = Location;
                 ProfileManager.CurrentProfile.BackpackGridSize = new Point(Width, Height);
+            }
+            else if (_isCorpse && ProfileManager.CurrentProfile != null)
+            {
+                ProfileManager.CurrentProfile.CoprseContainerPosition = Location;
             }
 
             Item item = World.Items.Get(LocalSerial);
@@ -968,16 +1151,14 @@ public partial class GridContainer : ResizableGump
         {
             base.OnMove(x, y);
 
-            if (_gridContainerEntry != null)
-            {
-                _gridContainerEntry.SetPositionForState(X, Y, IsMinimized);
-            }
+            _gridContainerEntry?.SetPositionForState(X, Y, IsMinimized);
 
             // Backpack special handling
             if (IsPlayerBackpack)
-            {
-                ProfileManager.CurrentProfile.BackpackGridPosition = new Point(X, Y);
-            }
+                ProfileManager.CurrentProfile?.BackpackGridPosition = new Point(X, Y);
+
+            if (_isCorpse)
+                ProfileManager.CurrentProfile?.CoprseContainerPosition = new Point(X, Y);
         }
 
         public override void Dispose()
@@ -1000,7 +1181,7 @@ public partial class GridContainer : ResizableGump
                 if (currentContainer == SelectedObject.CorpseObject)
                     SelectedObject.CorpseObject = null;
 
-                Item bank = World.Player.FindItemByLayer(Layer.Bank);
+                Item bank = World.Player?.FindItemByLayer(Layer.Bank);
 
                 if (bank != null && (currentContainer.Serial == bank.Serial || currentContainer.Container == bank.Serial))
                 {

@@ -5,6 +5,7 @@ using ClassicUO.Configuration;
 using ClassicUO.Game;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.Managers;
+using ClassicUO.UnitTests.Fixtures;
 using FluentAssertions;
 using Xunit;
 
@@ -21,6 +22,7 @@ namespace ClassicUO.UnitTests.Game.Managers
     /// a failed serial lookup started returning the raw, un-overridden text instead of trying the
     /// text based override.
     /// </summary>
+    [Collection(CurrentProfileCollection.Name)]
     public class ToolTipOverrideTest : IDisposable
     {
         // Any serial in [0x40000000, 0x80000000) is treated as an item by SerialHelper.IsItem.
@@ -170,12 +172,14 @@ namespace ClassicUO.UnitTests.Game.Managers
 
         /// <summary>
         /// Replaces the cached <see cref="TooltipOverridesConfig"/> with one holding exactly the given
-        /// overrides. Tooltip overrides now live in tooltip_overrides.json (via TooltipOverridesConfig)
-        /// rather than the profile, so tests seed the config directly instead of the profile's lists.
+        /// overrides (seeded into the Char scope, the aggregate's default editing scope). Tooltip overrides
+        /// now live in per-scope tooltip_overrides.json files rather than the profile, so tests seed the
+        /// config directly instead of the profile's lists.
         /// </summary>
         private static void SetTooltipOverrides(params ToolTipOverrideData[] overrides)
         {
-            var config = new TooltipOverridesConfig { Overrides = new List<ToolTipOverrideData>(overrides) };
+            var config = new TooltipOverridesConfig();
+            config.Char.Overrides = new List<ToolTipOverrideData>(overrides);
 
             FieldInfo field = typeof(TooltipOverridesConfig).GetField(
                 "_current",

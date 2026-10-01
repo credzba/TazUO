@@ -67,6 +67,7 @@ namespace ClassicUO.Game
         private bool _needGraphicUpdate = true;
         private readonly List<Multi> _temp = new List<Multi>();
         private readonly Tooltip _tooltip;
+        private readonly DebugHoverTooltip _debugHover;
         private readonly World _world;
 
         /// <summary>
@@ -79,6 +80,7 @@ namespace ClassicUO.Game
         {
             _world = world;
             _tooltip = new Tooltip(world);
+            _debugHover = new DebugHoverTooltip(world);
             _aura = new Aura(30);
 
             for (int i = 0; i < 2; i++)
@@ -364,9 +366,7 @@ namespace ClassicUO.Game
                             break;
                     }
 
-                    float scale = Client.Game.RenderScale;
-
-                    _aura.Draw(sb, (int)(Mouse.Position.X * scale), (int)(Mouse.Position.Y * scale), hue, 0f);
+                    _aura.Draw(sb, Mouse.Position.X, Mouse.Position.Y, hue, 0f);
                 }
 
                 if (ProfileManager.CurrentProfile.ShowTargetRangeIndicator)
@@ -459,6 +459,7 @@ namespace ClassicUO.Game
             }
 
             DrawToolTip(sb, Mouse.Position);
+            _debugHover.Draw(sb);
 
             if (!Settings.GlobalSettings.RunMouseInASeparateThread)
             {
@@ -532,6 +533,9 @@ namespace ClassicUO.Game
 
         private void DrawToolTip(UltimaBatcher2D batcher, Point position)
         {
+            // A control may prepend a line (e.g. a counter cell's keybind) to whatever tooltip it shows.
+            _tooltip.Prefix = (UIManager.MouseOverControl as Control)?.TooltipPrefix;
+
             if (Client.Game.Scene is GameScene gs)
             {
                 if (

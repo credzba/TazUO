@@ -171,7 +171,10 @@ namespace ClassicUO.Game.Managers
             set
             {
                 _lastAttack = value;
-                if (ProfileManager.CurrentProfile != null && ProfileManager.CurrentProfile.OpenHealthBarForLastAttack)
+
+                // Only a real mobile gets a bar: World.Clear() zeroes this on logout and character
+                // switch, which would otherwise open one for serial 0.
+                if (SerialHelper.IsMobile(value) && ProfileManager.CurrentProfile?.OpenHealthBarForLastAttack == true)
                 {
                     if (ProfileManager.CurrentProfile.UseOneHPBarForLastAttack)
                     {
@@ -244,6 +247,13 @@ namespace ClassicUO.Game.Managers
             _targetCallback = callback;
             SetTargeting(CursorTarget.CallbackTarget, cursorId, cursorType);
         }
+
+        /// <summary>
+        /// Whether the cursor is armed for <paramref name="callback"/> specifically
+        /// </summary>
+        /// <param name="callback">The callback to test for, compared by reference.</param>
+        public bool IsCurrentTargetingAction(Action<object> callback) =>
+            callback != null && IsTargeting && TargetingState == CursorTarget.CallbackTarget && ReferenceEquals(_targetCallback, callback);
 
         public void SetTargeting(CursorTarget targeting, uint cursorID, TargetType cursorType)
         {
@@ -641,6 +651,38 @@ namespace ClassicUO.Game.Managers
         {
             TargetPacket(0, x, y, z);
             MultiTargetInfo = null;
+        }
+
+        /// <summary>
+        ///     Re-encodes <see cref="LastTargetInfo" /> into the 0x6C fields <see cref="TargetLast"/> replays.
+        ///     Needed when the last target is set programmatically instead of by an in-world selection, which
+        ///     is the only thing that normally refreshes the replay buffer.
+        /// </summary>
+        public void SyncLastTargetReplay()
+        {
+            LastTargetInfo info = LastTargetInfo;
+
+            uint serial = info.IsEntity ? info.Serial : 0;
+
+            // Land carries 0xFFFF as an IsLand sentinel; the wire value for a land target is 0.
+            ushort graphic = info.IsStatic ? info.Graphic : (ushort)0;
+
+            _lastDataBuffer[7] = (byte)(serial >> 24);
+            _lastDataBuffer[8] = (byte)(serial >> 16);
+            _lastDataBuffer[9] = (byte)(serial >> 8);
+            _lastDataBuffer[10] = (byte)serial;
+
+            _lastDataBuffer[11] = (byte)(info.X >> 8);
+            _lastDataBuffer[12] = (byte)info.X;
+
+            _lastDataBuffer[13] = (byte)(info.Y >> 8);
+            _lastDataBuffer[14] = (byte)info.Y;
+
+            _lastDataBuffer[15] = (byte)(info.Z >> 8);
+            _lastDataBuffer[16] = (byte)info.Z;
+
+            _lastDataBuffer[17] = (byte)(graphic >> 8);
+            _lastDataBuffer[18] = (byte)graphic;
         }
 
         public void TargetLast()

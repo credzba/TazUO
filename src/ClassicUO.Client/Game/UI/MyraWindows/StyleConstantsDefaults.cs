@@ -2,6 +2,8 @@ using Microsoft.Xna.Framework;
 using Myra.Graphics2D;
 using Myra.Graphics2D.Brushes;
 
+using ClassicUO.Game.UI.MyraWindows.Theme;
+
 namespace ClassicUO.Game.UI.MyraWindows;
 
 public static class StyleConstantsDefaults
@@ -31,6 +33,23 @@ public static class StyleConstantsDefaults
     /// </summary>
     public const string RESET_LABEL_ICON_TEXT = "⭯";
 
+    /// <summary>
+    /// Point size the reset glyph is drawn at inside a <see cref="TOOLBAR_BUTTON_SIZE"/> button.
+    /// </summary>
+    public const int RESET_ICON_FONT_SIZE = 24;
+
+    /// <summary>
+    /// A standard icon for a caveat attached to a setting - something the user should know before
+    /// trusting it, short of an error.
+    /// Must be used with a supported font such as <see cref="ClassicUO.Assets.EmbeddedFontNames.NOTO_SANS_2_SYMBOLS"/>
+    /// </summary>
+    public const string WarningLabelIconText = "⚠";
+
+    /// <summary>
+    /// Point size the warning glyph is drawn at when it sits inline beside a control's own label.
+    /// </summary>
+    public const int WarningIconFontSize = 32;
+
     public const int TOOLBAR_BUTTON_SIZE = 28;
 
     #region Inputs
@@ -41,8 +60,15 @@ public static class StyleConstantsDefaults
 
     #region Containers
 
-    public static readonly IBrush BorderBackgroundBrush = new SolidBrush(new Color(0, 0, 0, 25));
-    public static readonly IBrush BorderLineBrush = new SolidBrush(new Color(0, 0, 0, 75));
+    /// <summary>
+    /// Fill and outline of a framed area. Properties rather than fields: a field would be built once
+    /// from whichever palette happened to be current at type load, and would go on drawing that one
+    /// after a theme change.
+    /// </summary>
+    public static IBrush BorderBackgroundBrush => new SolidBrush(MyraTheme.Current.PanelFill);
+
+    /// <inheritdoc cref="BorderBackgroundBrush" />
+    public static IBrush BorderLineBrush => new SolidBrush(MyraTheme.Current.PanelBorder);
     public static readonly Thickness BorderThickness = new(2);
 
     #endregion

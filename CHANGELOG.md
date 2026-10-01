@@ -2,10 +2,255 @@
 All notable changes to TazUO will be recorded here.
 
 ---
-## In Development
+
+## 9/28/26
+* ***Feature:*** Added a "Toggle Scavenging" macro, and both it and "Toggle Auto Loot" now report when they enable or disable
+* ***Feature:*** Added "Set Rows" and "Set Columns" options to the Action Bar cell context menu's Size submenu, so you can type an exact row or column count
+* ***Feature:*** The improved buff bar's names and timers now use TrueType fonts instead of the classic bitmap font, with a selectable font and size under Options > Fonts (defaults to avadonian)
+* ***Fix:*** Fixed Action Bar cells sliding to a new position when adding or removing a column - every cell below the first row shifted because the grid is stored row-major. Cells now keep their visual position
+* ***Fix:*** Fixed the spell cursor indicator (including the line for linear spells like Wall of Stone) vanishing as soon as the target cursor appeared - the cast was being cleared in the network gap before the cursor arrived, so the indicator now shows until the cursor closes or the cast is cleared, and no longer requires "Show Range During Cast"
+* ***Feature:*** Added a cursor-following debug overlay when `-debug` mode is enabled - it identifies what is under the cursor (world objects, items, land, statics, and gumps/controls), shows a sprite preview where one exists, and reports the button ID when hovering a server gump button
+* ***Fix:*** Adjusted rider heights on several mounts: raised on the Clydesdale and elemental horses, lowered on the Manticore and True Britannian Horse
+* ***Fix:*** Applied `verdata.mul` animation patches (FileID 6) - animations shipped only as verdata patches (custom mounts, creatures, clothing on some shards) now render and animate instead of being invisible
+* ***Feature:*** Added support for a plain-text `Clilocs.txt` in the client folder to add or override cliloc strings (one per line: `number` then whitespace then text, `#` for comments)
+* ***Feature:*** Added support for loose art, gump and sound files - place static art in `Art/Statics/<id>.art`, land tiles in `Art/Land/<id>.art`, and gumps in `Gumps/<id>.gump`, or 22050 Hz mono 16-bit WAVs in `Sounds/<id>.wav`, to add or override the client's assets without repacking the archives
+* ***Fix:*** Fixed server map patches (0xBF 0x18) reading the land and static patch counts in the wrong order - they arrive statics-first, so land patches were silently discarded on shards that patch ground tiles
+* ***Feature:*** When a shared config file changed on disk, the save-conflict prompt now lists which settings differ (old and new values, truncated to fit), and the buttons are shortened so they fit on Windows
+
+## 9/27/26
+* ***Feature:*** Added new Action Bars
+* ***Fix:*** Fixed the grid container context menu's "Select by name" sub-menu rendering item names as plain text - embedded HTML formatting is now interpreted
+* ***Fix:*** Fixed a client crash when drawing a game effect created while no profile was loaded (the effect's captured profile was null) - it now falls back to the default preview profile
+* ***Fix:*** Fixed a client crash on shutdown when the save-conflict prompt appeared while the current profile had already been unloaded - input events pumped through the native prompt are no longer dispatched into the tearing-down game, where they could dereference the missing profile
+* ***Fix:*** Fixed a client crash when loading a corrupt gump whose gumpart data describes a pixel run past the end of the decoded image - the bad run is now skipped instead of throwing (this could crash at startup on a malformed `gumpart` file)
+* ***Fix:*** Fixed a client crash when the journal log location becomes unavailable mid-session (for example a removable or network drive) - the write failure is now logged and journaling to file is disabled instead of propagating into the message handler
+
+## 9/23/26
+* ***Feature:*** Added bandaging option to quick heal/cure buttons along with an internal rework of how it works
+* ***Feature:*** Added a "Swap equipped items on paperdoll drop" option (on by default) - dropping a wearable onto a paperdoll slot that already holds an item now unequips the existing item and equips the dropped one instead of doing nothing
+* ***Feature:*** Added a "Use KR equip packet for swaps" sub-option (off by default, per-server) - when enabled, paperdoll equip swaps use the KR equip macro packet (0xEC) the dress agent uses instead of the queue-based pickup/drop sequence
+* ***Fix:*** Fixed the overhead spell format not applying to Chivalry spells - their mantras arrive as localized cliloc messages rather than `MessageType.Spell`, so they are now treated as spells for formatting/hue
+* ***Misc:*** Updated compact horizontal status bar style by rearranging a few items and adding a few colors to more easily distinguish important values
+* ***Fix:*** Fixed a client crash in the "Enter Location" window when typing coordinates larger than an `int` could hold (the parsed X/Y overflowed) - oversized numbers are now treated as invalid input instead
+* ***Fix:*** Fixed a client crash when the weather system rescaled its effects after the window size changed while the weather had no effects configured (a divide-by-zero on the previous scaled count)
+* ***Fix:*** Fixed a client crash on shutdown when the save-conflict prompt appeared while the current profile had already been unloaded - key input arriving through the prompt no longer dereferences the missing profile
+
+## 9/22/26
+* ***Fix:*** Fixed the Legion Script `GetContainerGump()` returning nothing for an open container on the ground when its name overhead was showing - it now finds the container window
+
+## 9/18/26
+* ***Feature:*** Added a "Log History" option to the login screen's options menu
+* ***Fix:*** Fixed the log history window showing two overlapping scrollbars when resized small - the text area now fills the window's remaining space and is the only scroll region
+* ***Fix:*** Fixed a crash on shutdown when the voice recognition Vosk assembly could not be resolved during disposal - the error is now logged and the client unloads cleanly
+* ***Fix:*** Fixed a crash on shutdown when the web map server's `System.Net.HttpListener` assembly could not be resolved - the error is now logged and the client unloads cleanly
+* ***Fix:*** Fixed a client crash when drawing a corrupt or invalid static art entry with negative or oversized dimensions (the `width * height` pixel buffer overflowed) - the entry is now ignored instead
+* ***Fix:*** Fixed a crash on shutdown when `gumps.xml` could not be written because another process (antivirus, cloud sync, a second client) was holding it - the failure is now logged instead of crashing
+* ***Fix:*** Fixed a client crash when a Legion script error could not be formatted by IronPython because a runtime assembly (`System.Diagnostics.StackTrace`) was missing - the error is now logged and the raw exception shown instead
+
+## 9/17/26
+* ***Feature:*** Added a "Show server prompts in a popup window" option to the Options chat tab, so server prompts (like naming a rune) can be toggled between the popup and chat input without using the checkbox inside the popup itself
+
+## 9/15/26
+* ***Misc:*** Confirm with user when saving shared configs between clients that are mismatched which one to keep
+* ***Feature:*** Counter bar cells now show the hotkey in the tooltip
+* ***Feature:*** Healthbar collector now supports anchoring together and expanding width in addition to height
+* ***Fix:*** Fixed grid container items locked to the same slot double stacking - the first item keeps the slot and the second is moved to the first empty slot
+
+## 9/13/26
+* ***Feature:*** Added a "Skip locked-down items" option to the Scavenger agent tab (on by default) so locked down or secured house decorations are no longer picked up - [P.R 1079](https://github.com/PlayTazUO/TazUO/pull/1079) ([yuval-po](https://github.com/yuval-po))
+* ***Feature:*** Added a "Send crash reports" option under Options > Misc (on by default) to opt out of uploading crash reports; crash logs are still written to your Logs folder either way - [P.R 1079](https://github.com/PlayTazUO/TazUO/pull/1079) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Crash reports now include the .NET runtime, OS/architecture, and an anonymous install ID (a random value in `Data/installid`, no hardware, account, or network information) to group reports from the same installation - [P.R 1079](https://github.com/PlayTazUO/TazUO/pull/1079) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Localized the Scavenger agent tab - [P.R 1079](https://github.com/PlayTazUO/TazUO/pull/1079) ([yuval-po](https://github.com/yuval-po))
+
+## 9/12/26
+* ***Feature:*** Increased the maximum world map zoom from 8x to 10x
+* ***Legion:*** Added `API.SetLastTarget()` to override the client's last target - pass an entity `serial`, or a location (`x`, `y`, `z`) with an optional `graphic` to set a static (or land when omitted)
+
+## 9/10/26
+* ***Feature:*** Added `ForceDriver = 4` to force DirectX 11. Set it in the profile's `settings.json`. This can significantly improve performance on some Windows machines where OpenGL performs poorly. **If you experience low FPS or unusually poor performance, try setting `ForceDriver` to `4`** - [P.R 1067](https://github.com/PlayTazUO/TazUO/pull/1067) ([LasherasGH](https://github.com/LasherasGH))
+* ***Legion:*** Added `API.TargetRel()` to target the topmost visible object (entity, static/multi, or land) at a tile offset from the player, and added `Target()`/`TargetRel()` to entity objects to target the entity itself or a tile relative to its position
+* ***Legion:*** Fixed `API.TargetTileRel()` to target the highest non-land tile at the location instead of the base land tile. `API.TargetRel()`, `API.TargetTileRel()`, and entity `TargetRel()` accept a new `tilesOnly` argument (default `True`) to ignore entities
+* ***Fix:*** Fixed `PlayerMobile.IsCasting` not being cleared when a spell finished casting successfully, which could leave the self-heal hotkey and scripts waiting on a cast that had already ended. The casting freeze now only releases the freeze the client applied, so it no longer clears server-side paralysis on an HP change
+* ***Fix:*** Fixed crashes on startup when the native zlib library could not be loaded (for example a missing or mismatched `zlib.dll`). TazUO now always uses the built-in managed zlib, and the native `zlib.dll` is no longer shipped. The "Force using a managed zlib" option and the `-zlib` launch argument were removed since they are no longer needed
+
+## 9/8/26
+* ***Feature:*** Added a "Multi Move" sub-menu to the grid container context menu for selecting items into the multi-move system - "Select all", "Select by layer" (populated only with layers present in the container), "Select by graphic" (each entry shows the item's art next to its graphic id), and "Select by name" (distinct item names, no duplicates)
+* ***Fix:*** Fixed a NullReferenceException when opening a grid container caused by the new "Multi Move" context menu being built before the container's slot manager existed
+
+## 9/7/26
+* ***Legion:*** Added optional filters to `API.GetAllMobiles()` - `name` (case-insensitive partial match), `graphics`, `hues`, `minDistance`, `isHuman`, `isFemale`, `isGhost` (dead mobiles), `isFriend` (friends list), `poisoned`, `paralyzed`, and `hasLineOfSight`; each is ignored unless supplied, and `True`/`False` toggles include or exclude
+* ***Fix:*** Added a crash fix suggestion for when SDL cannot start the video system because the OS offers no display to the process (game launched outside a graphical desktop session, e.g. over SSH or on a headless machine) - crash logs now explain the cause and how to launch the game with a desktop display
+* ***Fix:*** Fixed a `ThreadInterruptedException` client crash when stopping a Legion script at the exact moment it was finishing on its own - the stop's pending thread interrupt now surfaces safely at the script's final cleanup instead of killing the script thread as an unhandled exception
+
+## 9/6/26
+* ***Misc:*** Changed city selection gump to use clilocs for facet location instead of hard coded
+* ***Feature:*** Added ObjectUsed API event, support for multi-sound/serial overlay triggers and a new ObjectUsed overlay trigger - [P.R 1051](https://github.com/PlayTazUO/TazUO/pull/1051) ([yuval-po](https://github.com/yuval-po))
+
+## 9/5/26
+* ***Fix:*** Fixed nameplate profiles not working with modifier only hotkeys
+* ***Fix:*** Fixed the world map "always show markers at any zoom" option not showing marker name labels when zoomed out - labels now respect the always-show override instead of being hidden below zoom level 6
+* ***Fix:*** Fixed a NullReferenceException in world map pathfinding when the player left the world or closed the map gump while a path search was still running on its background thread - the completion and step-failed callbacks now check whether the world/player is still present and abandon cleanly instead of crashing
+* ***Legion:*** Hardened the Legion scripting API against the world, player, or map going null while a script is running (e.g. during world teardown) - calls like `API.Pathfind`, `API.PathfindEntity`, `API.GetPath`, movement, targeting, and item handling now safely return false/null instead of throwing a NullReferenceException
+* ***Fix:*** Fixed version number in PR builds
+* ***Legion:*** Fixed a Legion script being wrongly reported as "did not stop and keeps running in the background" (and then locked out of restarting) when it was stopped and started again within the 2 second stop grace period - the stop check now only acts on the exact thread it was issued for, so a stale check can't mistake a new run for an unstopped one
+* ***Legion:*** Fixed a legion script crash when player was null checking for skills
+
+## 9/4/26
+* ***Feature:*** Custom cooldown bars now continue checking later rules when a sender filter does not match and no longer treat messages without a source as Self or Other
+
+### Features
+* Added a new modern status gump with progress bars
+* Added a new modern vertical status bar option
+* Added a new modern horizontal status bar option
+* Added a new modern horizontal compact status bar option
+* Added a new modern compact status bar option
+* Grid container item locks now expire after 60 days of the item being absent from the container, automatically clearing the saved lock and slot
+* Separated Scavenger agent from Autoloot, they now each have their own loot lists and enabled/disabled toggles
+* Added a per-container option to disable grid highlighting without affecting other containers - [P.R 1032](https://github.com/PlayTazUO/TazUO/pull/1032) ([Aryx75](https://github.com/Aryx75))
+* Added a world map context menu option to always show map markers regardless of zoom level
+* Added a per-server "Don't reopen corpses that have already been opened" option that keeps track of opened corpses and skips auto-reopening them
+
+### Legion
+* Added a warning about upcoming changes and to update your scripts
+* Added a warning when a script fails to stop
+* Added a warning when running a script with unbounded while loops
+* Added `API.IsKeyPressed("CTRL+SHIFT+F1")` method to see if a key(s) is currently held down
+* Added `API.Gumps.CreateGumpRenderedMapArea` to build a rendered area of the map in a gump
+* Removed hard 30 second limit on `API.Pause()`
+* Added `GetSpellsInSpellbook(uint serial)`, listing all spell names in that spellbook
+
+### Misc
+* Mouse handling performance improvements
+* Added auto pruning to Item Database to prevent unbounded database growth ( 120 days since item last seen, it's deleted )
+* Increase max global scale to 300% up from 175%
+* Migrated more settings to global scoped json settings
+
+### Fixes
+* Fixed the health bar indicator threshold so its percentage setting is applied correctly - [P.R 1052](https://github.com/PlayTazUO/TazUO/pull/1052) ([Aryx75](https://github.com/Aryx75))
+* Fixed a NullReferenceException in `API.UseSkill()` when the player was null (world tearing down) or the skill list was not yet loaded - the call now safely returns without using the skill
+* Fixed missing key codes in plugin keyup processing
+* Fixed timestamped Global Chat messages sent by the local player not appearing in Global Chat journal tabs - [P.R 1035](https://github.com/PlayTazUO/TazUO/pull/1035) ([Aryx75](https://github.com/Aryx75))
+* Fixed a crash (`IndexOutOfRangeException` in `Mobile.Draw`) that could occur when rendering a mobile whose queued walk step carried an unmasked direction byte (e.g. the running flag) - the direction is now always normalized to 0-7 before use
+* Fixed a client crash at startup when the generated `Data/Client` files (`chair.txt`, `lights.txt`, `lightshaders.txt`) could not be written or read because another process (antivirus, OneDrive, a second instance, or an editor) held a lock on them - the client now logs a clear error and continues with the built-in defaults instead of crashing
+* Fixed locked grid container items no longer reclaiming their locked cell (and appearing unlocked) after being moved out of the container and back
+* Addressed a cross-thread issue and hardened controls a bit against future cross threading
+* Added a crash fix suggestion for when Windows blocks one of TazUO's files with an application control policy, whether a managed assembly loaded at runtime (for example MP3Sharp.dll) or a native library (for example FNA3D.dll) failing during startup
+* Fixed a client crash at login when the persistent-vars database could not be created or opened (e.g. the game's Data directory is not writable) - the client now logs a clear error and keeps running, with script variables simply not persisted until the directory is writable again
+* Hardened the SQLite layer to also quarantine and rebuild database files that cannot be opened (SQLite "unable to open database file"), not just files detected as corrupt
+* Fixed a client crash when using `API.Gumps.CreateGumpRenderedMapArea` (map offsets were being dereferenced as pointers), and made it render only the requested region with proper cleanup on close
+* Fixed a crash fix for a race condition while opening a container during shutdown
+* Fixed a NullReferenceException when opening a grid container while the world was tearing down (player could be nulled mid-construction)
+* Myra sliders and checkboxes no longer listen to right clicks (Causing accidental changed when closing via right click over a checkbox/slider)
+* Improved treasure map location calculations - [P.R 1012](https://github.com/PlayTazUO/TazUO/pull/1012) [Erumite](https://github.com/Erumite)
+* Door movement blocking no longer stops you from walking into closed doors when the "Open doors while pathfinding" (smooth doors) setting is enabled, and the option label is now "Block walking into doors"
+* Fixed a client crash at startup when `settings.json` is missing or corrupt - command-line arguments are now applied after the fallback settings are restored
+* Fixed a NullReferenceException when an extended stats packet (0x19) arrived while the world was tearing down (player could be nulled mid-construction)
+* Fixed a NullReferenceException in the journal when a journal entry could not be recycled from the journal history (a torn read of the non-thread-safe journal deque) - the client now falls back to a fresh entry, skips null/whitespace message text, and `API.HeadMsg` ignores empty messages
+* Added a crash fix suggestion when a crash happens on a background thread spawned by a third-party plugin/assistant (for example a UO copilot running its own UI) - the crash log now points to the plugin as the likely cause instead of TazUO
+
+## 5.31.2
+
+### Legion
+* Added a `sortby` parameter to `API.GetAllMobiles()`, supporting `Distance`, `Hits`, and `MaxHits` (case insensitive, defaults to `Distance`)
+
+### Features
+* Tooltip overrides now support global, account, server, and char specific entries
+* Added max option to autoloot (autoloot up to x amt in your destination bag)
+* Added a new overlay system event trigger - Buff/Debuff - [P.R 974](https://github.com/PlayTazUO/TazUO/pull/974) ([yuval-po](https://github.com/yuval-po))
+* Added search functionality to the Tinkerer's Art Browser - [P.R 974](https://github.com/PlayTazUO/TazUO/pull/974) ([yuval-po](https://github.com/yuval-po))
+* Added a translucent ground preview of the item being dragged, shown on the tile it would land on when dropped on the ground (drag distance and Z-banded), toggleable under Gameplay -> Misc, enabled by default ([bittiez](https://github.com/bittiez))
+* Added an option to classify timestamped system messages as Global Chat using configurable regular expressions - [P.R 1014](https://github.com/PlayTazUO/TazUO/pull/1014) ([Aryx75](https://github.com/Aryx75))
+
+### Misc
+* Added a Mount Distance option to the Option's combat tab - [P.R 995](https://github.com/PlayTazUO/TazUO/pull/995) ([yuval-po](https://github.com/yuval-po))
+* Added 2 new crash fix suggestions for Windows based systems - [P.R 994](https://github.com/PlayTazUO/TazUO/pull/994) ([yuval-po](https://github.com/yuval-po))
+* Added spacing before capitals on equipement layer tooltips in paperdolls
+* Changed Dress and Organizer agent tabs to have a more compact list instead of awkward buttons for configs
+* The classic journal gump (JournalGump) now respects the "Hide journal timestamps" setting, which was moved from per-profile to machine-wide (global) settings
+
+### Fixes
+* The right/bottom dead space that appeared when using a global scale below 100% is now usable: gumps, windows, containers, and the world viewport can be dragged into and interacted with there, and gumps/dropdowns/tooltips now center and clamp against the full visible window instead of the shrunken world view
+* Properly restore corpse container position after new game session
+* Attempt to catch plugin crashes before the kill the client
+* Fix a rare crash fix on periphial input before profiles have been loaded
+* Fixed incorrect rendering of partially-hued textures in Myra components - [P.R 989](https://github.com/PlayTazUO/TazUO/pull/989) ([yuval-po](https://github.com/yuval-po))
+* Improved erratic ToggleMount/Mount/Dismount macro behavior - [P.R 982](https://github.com/PlayTazUO/TazUO/pull/982) ([yuval-po](https://github.com/yuval-po))
+* Tooltip overrides should no long show a long number like -1.797673xxxxxxxxxxxx randomly
+* Fixed login music being silenced when the regular music toggle was off: login music now uses its own enable/volume settings independently of the main music setting
+* Fixed an issue where corrupt Info-Bars could prevent client from loading - [P.R 980](https://github.com/PlayTazUO/TazUO/pull/980) ([yuval-po](https://github.com/yuval-po))
+* Fixed a double max height in persistent vars window
+
+## 5.28.1
+
+### Legion
+* Added `justice` support to `API.Virtue()` - [P.R 938](https://github.com/PlayTazUO/TazUO/pull/938) ([bittiez](https://github.com/bittiez))
+* Added `API.OpenQuestLog()` to open the quest log gump - [P.R 938](https://github.com/PlayTazUO/TazUO/pull/938) ([bittiez](https://github.com/bittiez))
+* Added `API.OpenHelp()` to open the help menu - [P.R 938](https://github.com/PlayTazUO/TazUO/pull/938) ([bittiez](https://github.com/bittiez))
+* Added run parameter to pathfinding methods
+* Added `.IsParalyzed` to mobile objects
+
+### Features
+* Added a visual effects composition and management system to allow for custom UI effects such as fog and blur. - [P.R 958](https://github.com/PlayTazUO/TazUO/pull/958) ([yuval-po](https://github.com/yuval-po))
+* Added a right-click option to the Journal tab on the top menu bar that opens a context menu with an "Open original journal" option, opening the classic `JournalGump` instead of the resizable journal
+* Added a setting to show heal/cure buttons on pet health bars, separate from the existing all-health-bar and friends-list toggles ([bittiez](https://github.com/bittiez))
+* Added current global action queue and main thread queue counts to the Profiler window, along with a button to clear the action queue, all refreshed at 250ms
+* Added an option to block walking into closed doors, preventing walk requests that the server rejects and the client bounces back from ([bittiez](https://github.com/bittiez))
+* Redesign bandage agent tab UI, and add option to use a server command for self heal ([bittiez](https://github.com/bittiez))
+* Added a configurable bandage distance to the Bandage Agent (1-15 tiles, default 3) that controls how far friends and allies must be to be bandaged, replacing the previously hardcoded 3-tile range ([bittiez](https://github.com/bittiez))
+* Added a configurable auto-target type option to the Bandage Agent (Neutral/Harmful/Beneficial), replacing the previously hardcoded beneficial target type ([bittiez](https://github.com/bittiez))
+* When a pin is placed on a server-sent map gump, the client now prints a message with the deciphered coordinates ("I can't be certain but I believe this is somewhere near {x} and {y}.")
+* Corpse grid containers now remember their own position (separate from regular containers), saving and restoring it per profile ([bittiez](https://github.com/bittiez))
+
+### Misc
+* Replace tooltip override window with a new, easier to view and understand window
+* Right click to close should be more accurate now
+* Drawing one more tile outside the viewport for smooth static loading
+* Clicking login music toggle on login screen should stop music now
+* Improved client performance when entering heavily populated areas: network packets are now processed under a per-frame time budget instead of a fixed message cap, unchanged item/mobile updates are skipped, and world object lookups/insertions use single-hash dictionary operations
+* Moved the corpse opening settings (auto open corpses, corpse open distance, corpse open options) from the Misc options tab into a "Corpse Opening" container under Gameplay -> Mobiles -> Misc ([bittiez](https://github.com/bittiez))
+* Made looting take higher priority over opening corpses *except your own corpse and manually opened corpses*
+* Migrated WASD Movement and Single click to cast spell settings to Global settings, migrated turn delay to server settings ([bittiez](https://github.com/bittiez))
+* Add some missing weapon abilities
+
+### Fixes
+* Fixed a `NoAudioHardwareException` crash on machines without an audio device: the audio availability probe no longer creates a `DynamicSoundEffectInstance` (which left a partially-built object for the GC finalizer to crash on) and instead reads `SoundEffect.MasterVolume` ([bittiez](https://github.com/bittiez))
+* Remove presets for auto skinnig knife id's to prevent trying to use the incorrect item on servers ([bittiez](https://github.com/bittiez))
+* Fixed a rare crash that could occur when a grid container is moved - [P.R 958](https://github.com/PlayTazUO/TazUO/pull/958) ([yuval-po](https://github.com/yuval-po))
+* Fixed the candle flicker effect speeding up while moving: the flicker phase is now seeded from each light's world position instead of its screen position, so it oscillates at a constant speed
+* Fixed a NullReferenceException in the counter bar when an item or spell graphic could not be loaded; the icon is now skipped instead of crashing the client ([bittiez](https://github.com/bittiez))
+* Fixed stuttering on UltimaLive servers: `GetBlockCrc` now reads the map/statics block with bulk reads instead of one locked seek+read syscall per byte, terrain updates no longer re-read the same map blocks from disk dozens of times per chunk (cached on stream-based files), chunk reloads triggered by streamed terrain/statics updates are now coalesced and time-throttled (rebuilt at most once per frame, spread across frames instead of all at once), and packet file writes are no longer flushed synchronously on the render thread (flushing moved to a background thread) ([bittiez](https://github.com/bittiez))
+* Fixed an `ArgumentOutOfRangeException` on UltimaLive servers when the client connected: all reads on UltimaLive's dynamically-growing map/statics files are now serialized under a single lock (previously some read paths bypassed it and could race with the background flush thread) ([bittiez](https://github.com/bittiez))
+* Fixed a 1-2 second freeze when taking a screenshot: PNG encoding and file writing now run on a background thread so the frame is no longer stalled
+
+## 5.24.5
+
+### Features
+* Added an option to use the modern color picker for things like dye tubs - [P.R 920](https://github.com/PlayTazUO/TazUO/pull/920) ([bittiez](https://github.com/bittiez))
+* Added option to allow auto open door system to also close doors - [P.R 919](https://github.com/PlayTazUO/TazUO/pull/919) ([bittiez](https://github.com/bittiez))
+
+### Legion
+* Added optional font size to ApiUiTtfTextInputField control - [P.R 912](https://github.com/PlayTazUO/TazUO/pull/912) ([bittiez](https://github.com/bittiez))
+
+### Fixes
+* Fixed characters remaining mounted upon death on POL servers - [P.R 923](https://github.com/PlayTazUO/TazUO/pull/923) ([bittiez](https://github.com/bittiez))
+* Auto skinning was not firing for old grid loot style ([bittiez](https://github.com/bittiez))
+* Query for criminal action should not continue reopening for the same serial ([bittiez](https://github.com/bittiez))
+* Fixed a crash (`NoAudioHardwareException`) when the audio device becomes unavailable while sounds are still held by the client; sound instances are now disposed deterministically instead of being left to the garbage collector, so the audio finalizer can no longer crash the client - [P.R 916](https://github.com/PlayTazUO/TazUO/pull/916) ([bittiez](https://github.com/bittiez))
+* Fixed the Alt/Shift/Ctrl modifier state getting stuck after Alt+Tab, since the key-up event is never delivered when the window loses focus; modifiers are now cleared on focus loss/gain ([bittiez](https://github.com/bittiez))
+* Added a suggested crash fix for plugins crashing TazUO while injecting a network packet into the client (e.g. an assistant's `SendToClient` passing a packet that does not fit its buffer), pointing the user at the plugin rather than TazUO ([bittiez](https://github.com/bittiez))
+* Fixed target aura not in the correct spot when game scaled - [P.R 911](https://github.com/PlayTazUO/TazUO/pull/911) ([bittiez](https://github.com/bittiez))
+* Fixed a NullReferenceException when scrolling with the opacity hotkey after the current profile is unloaded - [P.R 910](https://github.com/PlayTazUO/TazUO/pull/910) ([bittiez](https://github.com/bittiez))
+
+### Misc
+* When built in Debug there is now an asset load time on the login scene ([bittiez](https://github.com/bittiez))
+* Moved Cliloc load to load async, improving load times when starting the client - [P.R 899](https://github.com/PlayTazUO/TazUO/pull/899) ([bittiez](https://github.com/bittiez))
+* Migrated circle of transparency and sound/music settings (master sound/music volume, footsteps, rain, combat music, background audio) from per-character profiles to global settings ([bittiez](https://github.com/bittiez))
+
+## 5.22.15
 
 ### Legion
 * Added `Highlight(hue)` to game objects, setting the hue and remembering the original so it can be restored with `Highlight(None)`; on mobiles it also recolors all equipped items - [P.R 881](https://github.com/PlayTazUO/TazUO/pull/881) ([bittiez](https://github.com/bittiez))
+* Added `API.UpdateCooldown(name, maxValue, currentValue)`, `API.RestartCooldown(name)`, `API.DeleteCooldown(name)` and `API.CooldownExists(name)` to manage cooldown bars created with `API.CreateCooldownBar` ([bittiez](https://github.com/bittiez))
 
 ### Features
 * Added Friend option to Select Nearest macro - ([bittiez](https://github.com/bittiez))
@@ -15,6 +260,11 @@ All notable changes to TazUO will be recorded here.
 * Spell names, reagent names, and magic circle names now use server cliloc strings when available, falling back to the built-in English strings otherwise - [P.R 885](https://github.com/PlayTazUO/TazUO/pull/885) ([bittiez](https://github.com/bittiez))
 
 ### Fixes
+* Fixed an `IO_SharingViolation_File` crash when running multiple TazUO clients against a shared `Data/language.*.ini`; language files are now opened with shared read/write access and rewritten atomically via a temp file so concurrent clients can read and merge them without collisions ([bittiez](https://github.com/bittiez))
+* Fixed a NullReferenceException when toggling "Stay active" in the nameplate manager gump on shards whose gumpart is missing the radio button art; failed button construction is now handled gracefully instead of leaving a broken control behind ([bittiez](https://github.com/bittiez))
+* Fixed empty chat input entries being saved to the message history - [P.R 900](https://github.com/PlayTazUO/TazUO/pull/900) ([bittiez](https://github.com/bittiez))
+* Fixed a rare "The deque is empty" crash when processing mobile movement steps, caused by the steps deque being cleared concurrently while the main thread removed a step ([bittiez](https://github.com/bittiez))
+* Minor UI bug fixes in modern paperdoll and myra windows ([bittiez](https://github.com/bittiez))
 * MacroManager select next/previous/nearest with the Hostile scan type now skips anyone on the friends list - [P.R 880](https://github.com/PlayTazUO/TazUO/pull/880) ([bittiez](https://github.com/bittiez))
 * Auto skinning now responds to any target cursor type instead of only neutral, so it works on servers that send a different target type for the skinning knife - [P.R 879](https://github.com/PlayTazUO/TazUO/pull/879) ([bittiez](https://github.com/bittiez))
 * Fixed in-game screenshots showing the world viewport as partially transparent by forcing the saved image to be fully opaque - [P.R 870](https://github.com/PlayTazUO/TazUO/pull/870) ([bittiez](https://github.com/bittiez))
