@@ -47,11 +47,49 @@ namespace ClassicUO.Assets
     {
         public static TileArtLoader TileArtLoader { get; private set; }
 
+        public static string OverrideDirectory;
+        public static string[] AssetPaths;
+
+        private static readonly Dictionary<string, string> _pairedUOFiles = CreatePairedUOFiles();
+
+        private static Dictionary<string, string> CreatePairedUOFiles()
+        {
+            var paired = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddPair(string first, string second)
+            {
+                paired[first] = second;
+                paired[second] = first;
+            }
+
+            for (int i = 0; i <= 10; i++)
+            {
+                string animName = "anim" + (i == 0 ? string.Empty : (i + 1).ToString());
+
+                AddPair(animName + ".mul", animName + ".idx");
+            }
+
+            AddPair("art.mul", "artidx.mul");
+            AddPair("gumpart.mul", "gumpidx.mul");
+            AddPair("multi.mul", "multi.idx");
+            AddPair("texmaps.mul", "texidx.mul");
+            AddPair("sound.mul", "soundidx.mul");
+            AddPair("light.mul", "lightidx.mul");
+            AddPair("skills.mul", "skills.idx");
+
+            return paired;
+        }
+
         public static string GetUOFilePath(string file)
         {
             if (!UOFilesOverrideMap.Instance.TryGetValue(file.ToLowerInvariant(), out string uoFilePath))
             {
-                uoFilePath = Path.Combine(BasePath, file);
+                uoFilePath = GetOverrideFilePath(file);
+
+                if (uoFilePath == null)
+                {
+                    uoFilePath = Path.Combine(BasePath, file);
+                }
             }
 
             //If the file with the given name doesn't exist, check for it with alternative casing if not on windows
@@ -82,6 +120,47 @@ namespace ClassicUO.Assets
             }
 
             return uoFilePath;
+        }
+
+        private static string GetOverrideFilePath(string file)
+        {
+            string[] paths = AssetPaths;
+
+            if (paths == null || paths.Length == 0)
+            {
+                if (string.IsNullOrEmpty(OverrideDirectory))
+                {
+                    return null;
+                }
+
+                paths = new[] { OverrideDirectory };
+            }
+
+            foreach (string directory in paths)
+            {
+                if (string.IsNullOrEmpty(directory))
+                {
+                    continue;
+                }
+
+                string candidate = Path.Combine(directory, file);
+
+                if (!File.Exists(candidate))
+                {
+                    continue;
+                }
+
+                if (_pairedUOFiles.TryGetValue(file, out string sibling) && !File.Exists(Path.Combine(directory, sibling)))
+                {
+                    Log.Warn($"Override directory '{directory}' contains '{file}' without its counterpart '{sibling}'; ignoring both and using the base files.");
+
+                    continue;
+                }
+
+                return candidate;
+            }
+
+            return null;
         }
 
         public static ClientVersion Version;

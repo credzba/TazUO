@@ -32,6 +32,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.Scenes;
@@ -659,6 +661,77 @@ namespace ClassicUO.Game.GameObjects
             { 0x3EE1, 0x0678 }, // Horse_Elemental_Water
             { 0x3EE2, 0x0679 }, // Horse_Elemental_Air
         };
+
+        public static void ApplyServerProfileMounts()
+        {
+            if (!ServerProfile.MountsEnabled)
+            {
+                return;
+            }
+
+            LoadMountsDef();
+
+            ServerMountsInfo mounts = ServerProfile.Current?.Mounts;
+
+            if (mounts?.Entries == null)
+            {
+                return;
+            }
+
+            foreach (ServerMountInfo entry in mounts.Entries)
+            {
+                if (TryParseHexUShort(entry.Body, out ushort body) && TryParseHexUShort(entry.Anim, out ushort anim))
+                {
+                    _mounts[body] = anim;
+                }
+            }
+        }
+
+        public static void LoadMountsDef()
+        {
+            string file = UOFileManager.GetUOFilePath("Mounts.def");
+
+            if (File.Exists(file))
+            {
+                using (DefReader defReader = new DefReader(file, 2))
+                {
+                    while (defReader.Next())
+                    {
+                        ushort bodyId = (ushort)defReader.ReadInt();
+                        ushort animationId = (ushort)defReader.ReadInt();
+
+                        _mounts[bodyId] = animationId;
+                    }
+                }
+            }
+        }
+
+        private static bool TryParseHexUShort(string value, out ushort result)
+        {
+            result = 0;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            value = value.Trim();
+
+            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(2);
+            }
+
+            try
+            {
+                result = Convert.ToUInt16(value, 16);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
         public override ushort GetGraphicForAnimation()
         {

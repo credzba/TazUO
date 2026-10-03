@@ -70,6 +70,9 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("ultimaonlinedirectory")]
         public string UltimaOnlineDirectory { get; set; } = "";
 
+        [JsonPropertyName("override_directory")]
+        public string OverrideDirectory { get; set; } = "";
+
         [JsonPropertyName("profilespath")] public string ProfilesPath { get; set; } = string.Empty;
 
         [JsonPropertyName("clientversion")] public string ClientVersion { get; set; } = string.Empty;
@@ -164,6 +167,18 @@ namespace ClassicUO.Configuration
             // NOTE: We can do any other settings clean-ups here before we save them
 
             ConfigurationResolver.Save(settingsToSave, GetSettingsFilepath(), SettingsJsonContext.RealDefault);
+        }
+
+        public static string ResolveOverrideDirectory()
+        {
+            string directory = GlobalSettings?.OverrideDirectory;
+
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return null;
+            }
+
+            return Path.IsPathRooted(directory) ? directory : Path.Combine(CUOEnviroment.ExecutablePath, directory);
         }
     }
 }

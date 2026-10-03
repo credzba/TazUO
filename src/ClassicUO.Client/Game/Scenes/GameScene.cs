@@ -205,6 +205,8 @@ namespace ClassicUO.Game.Scenes
         {
             base.Load();
 
+            Item.ApplyServerProfileMounts();
+
             UISettings.Preload();
 
             GridContainerSaveData.Instance.Load();

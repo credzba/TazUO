@@ -83,12 +83,12 @@ namespace ClassicUO.Assets
         private unsafe void LoadInternal()
         {
             bool loaduop = false;
-            
 
             for (int i = 0; i < 10; i++)
             {
-                var pathmul = UOFileManager.GetUOFilePath("anim" + (i == 0 ? string.Empty : (i + 1).ToString()) + ".mul");
-                var pathidx = UOFileManager.GetUOFilePath("anim" + (i == 0 ? string.Empty : (i + 1).ToString()) + ".idx");
+                string animName = "anim" + (i == 0 ? string.Empty : (i + 1).ToString());
+                var pathmul = UOFileManager.GetUOFilePath(animName + ".mul");
+                var pathidx = UOFileManager.GetUOFilePath(animName + ".idx");
 
                 if (File.Exists(pathmul) && File.Exists(pathidx))
                 {

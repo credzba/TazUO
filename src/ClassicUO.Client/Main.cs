@@ -350,6 +350,13 @@ namespace ClassicUO
 
                         break;
 
+                    case "override":
+                    case "overridedir":
+                    case "overridedirectory":
+                        Settings.GlobalSettings.OverrideDirectory = value;
+
+                        break;
+
                     case "ultimaonlinedirectory":
                     case "uopath":
                         Settings.GlobalSettings.UltimaOnlineDirectory = value;

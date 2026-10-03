@@ -180,6 +180,11 @@ namespace ClassicUO
             Log.Trace($"Protocol: {Protocol}");
 
             // ok now load uo files
+            UOFileManager.OverrideDirectory = Settings.ResolveOverrideDirectory();
+
+            ServerProfile serverProfile = ServerProfile.Load(UOFileManager.OverrideDirectory);
+            UOFileManager.AssetPaths = ServerProfile.ResolveAssetPaths(UOFileManager.OverrideDirectory, serverProfile?.AssetPaths);
+
             UOFileManager.Load(Version, Settings.GlobalSettings.UltimaOnlineDirectory, Settings.GlobalSettings.UseVerdata, Settings.GlobalSettings.Language);
             StaticFilters.Load();
 

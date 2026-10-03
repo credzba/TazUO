@@ -7,7 +7,7 @@ namespace ClassicUO.Renderer.Animations
 {
     public sealed class Animations
     {
-        const int MAX_ANIMATIONS_DATA_INDEX_COUNT = 2048;
+        const int MAX_ANIMATIONS_DATA_INDEX_COUNT = 8192;
 
         private readonly TextureAtlas _atlas;
         private readonly PixelPicker _picker = new PixelPicker();
@@ -27,7 +27,7 @@ namespace ClassicUO.Renderer.Animations
                 _cache = new AnimationDirection[Math.Max(body, MAX_ANIMATIONS_DATA_INDEX_COUNT)][][];
 
             if (body >= _cache.Length)
-                Array.Resize(ref _cache, body);
+                Array.Resize(ref _cache, body + 1);
 
             if (_cache[body] == null)
                 _cache[body] = new AnimationDirection[AnimationsLoader.MAX_ACTIONS][];

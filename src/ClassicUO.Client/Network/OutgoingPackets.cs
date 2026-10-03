@@ -545,6 +545,34 @@ namespace ClassicUO.Network
             writer.Dispose();
         }
 
+        public static void Send_NewCUOVerifier(this AsyncNetClient socket)
+        {
+            const byte ID = 0x4A;
+
+            ServerClientVerifier verifier = ServerProfile.Current?.Features?.Network?.ClientVerifier;
+
+            if (verifier == null)
+            {
+                return;
+            }
+
+            int length = PacketsTable.GetPacketLength(ID);
+
+            var writer = new StackDataWriter(length < 0 ? 64 : length);
+            writer.WriteUInt8(ID);
+
+            if (length < 0)
+            {
+                writer.WriteZero(2);
+            }
+
+            writer.WriteUInt32BE((uint)verifier.Version);
+
+            socket.Send(writer.BufferWritten);
+
+            writer.Dispose();
+        }
+
         public static void Send_PickUpRequest(this AsyncNetClient socket, uint serial, ushort count)
         {
             const byte ID = 0x07;
