@@ -417,7 +417,7 @@ namespace ClassicUO.Game.UI.Controls
                     return _layerOrderParrotFix;
 
                 if (cloak.ItemData.IsContainer ||
-                    (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine &&
+                    (ServerProfile.PaperdollEnabled &&
                      cloak.Graphic == CLOAK_GRAPHIC)
                    )
                     return _layerOrderQuiverFix;
@@ -432,7 +432,7 @@ namespace ClassicUO.Game.UI.Controls
                 return _layerOrder;
 
 
-            bool isEventineCloak = Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine
+            bool isEventineCloak = ServerProfile.PaperdollEnabled
                                    && Client.Game.UO.GameCursor.ItemHold.Graphic == CLOAK_GRAPHIC;
 
             return Client.Game.UO.GameCursor.ItemHold.ItemData.IsContainer || isEventineCloak
@@ -491,7 +491,7 @@ namespace ClassicUO.Game.UI.Controls
 
             // When dealing with Eventine, the 'legs' layer is always the first one.
             // Other server-specific ordering quirks can be added here later as necessary.
-            if (Settings.GlobalSettings.CustomServer != Settings.CustomServers.Eventine || !(layers?.Length > 2))
+            if (!ServerProfile.PaperdollEnabled || !(layers?.Length > 2))
                 return copy;
 
             int legsLayerIdx = copy.IndexOf(Layer.Legs);

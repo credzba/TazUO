@@ -39,7 +39,7 @@ internal static class OpenContainer
         if (world.Player == null)
             return;
 
-        if (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+            if (ServerProfile.EventineOpenContainerEnabled)
         {
             ReceiveEventine(world, ref p);
             return;

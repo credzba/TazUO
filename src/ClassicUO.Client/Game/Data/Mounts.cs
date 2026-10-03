@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using ClassicUO.Configuration;
 using ClassicUO.IO;
+using ClassicUO.Utility.Logging;
 
 namespace ClassicUO;
 
@@ -87,8 +89,58 @@ internal static class Mounts
         _mounts[0x3EE4] = new(0x06C1, 0x3EE4, -4); // Horse_True_Britannia
 
         //Load custom mounts for Eventine
-        if(Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+        if (ServerProfile.MountsEnabled)
             LoadMountsDef();
+
+        ApplyServerProfile();
+    }
+
+    public static void ApplyServerProfile()
+    {
+        ServerMountsInfo mounts = ServerProfile.Current?.Mounts;
+
+        if (mounts?.Entries == null)
+        {
+            return;
+        }
+
+        foreach (ServerMountInfo entry in mounts.Entries)
+        {
+            if (!TryParseHexUShort(entry.Body, out ushort body) || !TryParseHexUShort(entry.Anim, out ushort anim))
+            {
+                Log.Warn($"Server profile mount entry has invalid body '{entry.Body}' or anim '{entry.Anim}', skipping.");
+                continue;
+            }
+
+            _mounts[body] = new MountInfo(anim, body, (sbyte)entry.OffsetY);
+        }
+    }
+
+    private static bool TryParseHexUShort(string value, out ushort result)
+    {
+        result = 0;
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        value = value.Trim();
+
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value.Substring(2);
+        }
+
+        try
+        {
+            result = Convert.ToUInt16(value, 16);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     public static void LoadMountsDef()

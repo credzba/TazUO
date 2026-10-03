@@ -192,6 +192,10 @@ namespace ClassicUO
             Log.Trace($"Protocol: {Protocol}");
 
             FileManager = new UOFileManager(clientVersion, clientPath);
+            FileManager.OverrideDirectory = Settings.ResolveOverrideDirectory();
+
+            ServerProfile serverProfile = ServerProfile.Load(FileManager.OverrideDirectory);
+            FileManager.AssetPaths = ServerProfile.ResolveAssetPaths(FileManager.OverrideDirectory, serverProfile?.AssetPaths);
 
             try
             {

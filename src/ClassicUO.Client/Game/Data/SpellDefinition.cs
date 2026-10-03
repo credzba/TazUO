@@ -393,7 +393,7 @@ namespace ClassicUO.Game.Data
             if (fullidx < 300) return SpellsChivalry.GetSpell(fullidx % 100);
 
             #region Custom eventine spells
-            if (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+            if (ServerProfile.SpellSchoolsEnabled)
             {
                 if (fullidx < 340 ) return SpellsDruid.GetSpell((fullidx - 1) % 100);
 
@@ -569,10 +569,10 @@ namespace ClassicUO.Game.Data
                     break;
 
                 #region Custom eventine spells
-                case < 340 when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case < 340 when ServerProfile.SpellSchoolsEnabled:
                     SpellsDruid.SetSpell(id - 1, in sd);
                     break;
-                case < 400 when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case < 400 when ServerProfile.SpellSchoolsEnabled:
                     SpellsCleric.SetSpell(id - 41, in sd);
                     break;
                 #endregion

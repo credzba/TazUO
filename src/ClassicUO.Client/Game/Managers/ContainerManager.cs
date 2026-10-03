@@ -559,11 +559,66 @@ namespace ClassicUO.Game.Managers
 
             _data[0x9CE7] = new ContainerData(0x9CE7, 0x0000, 0x0000, 44, 65, 186, 159);
 
-            if(Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+            ApplyServerProfile();
+        }
+
+        private void ApplyServerProfile()
+        {
+            ServerProfile profile = ServerProfile.Current;
+
+            if (profile?.Containers == null)
             {
-                _data[0x9D6C] = new ContainerData(0x9D6C, 0x0000, 0x0000, 50, 60, 548, 308);
-                _data[0x9D6B] = new ContainerData(0x9D6B, 0x0000, 0x0000, 50, 60, 548, 308);
-                _data[0x9D6A] = new ContainerData(0x9D6A, 0x0000, 0x0000, 50, 60, 548, 308);
+                return;
+            }
+
+            foreach (ServerContainerInfo container in profile.Containers)
+            {
+                if (!TryParseHexUShort(container.Graphic, out ushort graphic))
+                {
+                    Log.Warn($"Server profile container entry has invalid graphic '{container.Graphic}', skipping.");
+                    continue;
+                }
+
+                _data[graphic] = new ContainerData
+                (
+                    graphic,
+                    (ushort)container.OpenSound,
+                    (ushort)container.CloseSound,
+                    container.X,
+                    container.Y,
+                    container.Width,
+                    container.Height,
+                    TryParseHexUShort(container.IconizedGraphic, out ushort iconized) ? iconized : (ushort)0,
+                    container.MinimizerX,
+                    container.MinimizerY
+                );
+            }
+        }
+
+        private static bool TryParseHexUShort(string value, out ushort result)
+        {
+            result = 0;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            value = value.Trim();
+
+            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(2);
+            }
+
+            try
+            {
+                result = Convert.ToUInt16(value, 16);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
     }

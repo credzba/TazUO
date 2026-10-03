@@ -313,7 +313,7 @@ namespace ClassicUO.Game.UI.Gumps
                 for (int j = 0; j < 2; j++)
                 {
                     if (page == 1
-                        && (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine
+                        && (ServerProfile.SpellSchoolsEnabled
                             ? _spellBookType == SpellBookType.Chivalry || _spellBookType == SpellBookType.Cleric
                             : _spellBookType == SpellBookType.Chivalry))
                     {
@@ -886,10 +886,10 @@ namespace ClassicUO.Game.UI.Gumps
                 case SpellBookType.Mastery:
                     return SpellsMastery.GetSpell(idx);
 
-                case SpellBookType.Druidic when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
                     return SpellsDruid.GetSpell(idx);
 
-                case SpellBookType.Cleric when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
                     return SpellsCleric.GetSpell(idx);
 
                 default:
@@ -1029,14 +1029,14 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case SpellBookType.Druidic when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
                     maxSpellsCount = SpellsDruid.MaxSpellCount;
                     bookGraphic = 0x2B18;
                     minimizedGraphic = 0x2B2D;
                     iconStartGraphic = 0x5A2A;
                     break;
 
-                case SpellBookType.Cleric when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
                     maxSpellsCount = SpellsCleric.MaxSpellCount;
                     bookGraphic = 0x2B0E;
                     minimizedGraphic = 0x2B0C;
@@ -1097,12 +1097,12 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case SpellBookType.Druidic when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
                     offset = 1136632;
 
                     break;
 
-                case SpellBookType.Cleric when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
                     offset = 1136654;
 
                     break;
@@ -1188,7 +1188,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case SpellBookType.Druidic when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
                     def = SpellsDruid.GetSpell(offset + 1);
                     name = def.GetLocalizedName();
                     abbreviature = def.PowerWords;
@@ -1196,7 +1196,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case SpellBookType.Cleric when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
                     def = SpellsCleric.GetSpell(offset + 1);
                     name = def.GetLocalizedName();
                     abbreviature = def.PowerWords;
@@ -1298,14 +1298,14 @@ namespace ClassicUO.Game.UI.Gumps
 
                     return;
 
-                case SpellBookType.Druidic when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
                     def = SpellsDruid.GetSpell(offset + 1);
                     manaCost = def.ManaCost;
                     minSkill = def.MinSkill;
 
                     break;
 
-                case SpellBookType.Cleric when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
                     def = SpellsCleric.GetSpell(offset + 1);
                     manaCost = def.ManaCost;
                     minSkill = def.MinSkill;
@@ -1445,10 +1445,10 @@ namespace ClassicUO.Game.UI.Gumps
                 case 0x225B:
                     return SpellBookType.Mastery;
 
-                case 0xCE3A when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case 0xCE3A when ServerProfile.SpellSchoolsEnabled:
                     return SpellBookType.Druidic;
 
-                case 0xCE3B when Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine:
+                case 0xCE3B when ServerProfile.SpellSchoolsEnabled:
                     return SpellBookType.Cleric;
             }
 

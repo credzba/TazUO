@@ -4,7 +4,6 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ClassicUO.Assets;
 using ClassicUO.Configuration.Json;
 using ClassicUO.Game;
 using Microsoft.Xna.Framework;
@@ -26,8 +25,6 @@ namespace ClassicUO.Configuration
 
     public sealed class Settings
     {
-        [JsonIgnore] public CustomServers? CustomServer;
-
         public const string SETTINGS_FILENAME = "settings.json";
         public static Settings GlobalSettings = new Settings();
         public static string CustomSettingsFilepath = null;
@@ -37,16 +34,7 @@ namespace ClassicUO.Configuration
 
         [JsonPropertyName("password")] public string Password { get; set; } = string.Empty;
 
-        [JsonPropertyName("ip")]
-        public string IP
-        {
-            get;
-            set
-            {
-                field = value;
-                DetectCustomServers();
-            }
-        } = "";
+        [JsonPropertyName("ip")] public string IP { get; set; } = "";
 
         [JsonPropertyName("port"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] public ushort Port { get; set; } = 2593;
 
@@ -56,6 +44,8 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("ignore_relay_ip")] public bool IgnoreRelayIp { get; set; } = false;
 
         [JsonPropertyName("ultimaonlinedirectory")] public string UltimaOnlineDirectory { get; set; } = "";
+
+        [JsonPropertyName("override_directory")] public string OverrideDirectory { get; set; } = "";
 
         [JsonPropertyName("profilespath")] public string ProfilesPath { get; set; } = string.Empty;
 
@@ -148,6 +138,18 @@ namespace ClassicUO.Configuration
             return Path.Combine(CUOEnviroment.ExecutablePath, SETTINGS_FILENAME);
         }
 
+        public static string ResolveOverrideDirectory()
+        {
+            string directory = GlobalSettings?.OverrideDirectory;
+
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return null;
+            }
+
+            return Path.IsPathRooted(directory) ? directory : Path.Combine(CUOEnviroment.ExecutablePath, directory);
+        }
+
         public void Save()
         {
             // Make a copy of the settings object that we will use in the saving process
@@ -169,22 +171,5 @@ namespace ClassicUO.Configuration
             ConfigurationResolver.Save(settingsToSave, GetSettingsFilepath(), SettingsJsonContext.RealDefault.Settings);
         }
 
-        private void DetectCustomServers()
-        {
-            string[] _eventineIPs = ["shard.uoeventine.net", "shard.uoeventine.com"];
-
-            if (_eventineIPs.Contains(IP))
-            {
-                CustomServer = CustomServers.Eventine;
-                CustomServerSettings.GetCustomAnimPath = () => Path.Combine(Path.GetFullPath(UltimaOnlineDirectory), "Anims" );
-                return;
-            }
-        }
-
-        public enum CustomServers
-        {
-            LOCAL_SERVER,
-            Eventine
-        }
     }
 }

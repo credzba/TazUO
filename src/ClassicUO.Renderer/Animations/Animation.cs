@@ -31,7 +31,7 @@ namespace ClassicUO.Renderer.Animations
                 _cache = new AnimationDirection[Math.Max(body, MAX_ANIMATIONS_DATA_INDEX_COUNT)][][];
 
             if (body >= _cache.Length)
-                Array.Resize(ref _cache, body);
+                Array.Resize(ref _cache, body + 1);
 
             if (_cache[body] == null)
                 _cache[body] = new AnimationDirection[AnimationsLoader.MAX_ACTIONS][];

@@ -440,7 +440,7 @@ namespace ClassicUO.Game.GameObjects
                                 outlineColor: OutlineColor
                             );
 
-                            if (layer == Layer.Robe && Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+                            if (layer == Layer.Robe && ServerProfile.PaperdollEnabled)
                             {
                                 // Search for item with graphic 0xA413
                                 Item aboveRobe = GetItemByGraphic(0xA413);
@@ -1316,7 +1316,7 @@ namespace ClassicUO.Game.GameObjects
                     Item robe;
 
                     //Eventine ignores pants layers
-                    if ((Settings.GlobalSettings.CustomServer != Settings.CustomServers.Eventine && mobile.FindItemByLayer(Layer.Legs) != null)
+                    if ((!ServerProfile.PaperdollEnabled && mobile.FindItemByLayer(Layer.Legs) != null)
                         || pants != null
                         && (
                             pants.Graphic == 0x1411 /*|| pants.Graphic == 0x141A*/
@@ -1346,7 +1346,7 @@ namespace ClassicUO.Game.GameObjects
                     pants = mobile.FindItemByLayer(Layer.Pants);
 
                     //Eventine ignores pants layers
-                    if ((Settings.GlobalSettings.CustomServer != Settings.CustomServers.Eventine && mobile.FindItemByLayer(Layer.Legs) != null)
+                    if ((!ServerProfile.PaperdollEnabled && mobile.FindItemByLayer(Layer.Legs) != null)
                         || robe != null && robe.Graphic == 0x0504
                     )
                     {

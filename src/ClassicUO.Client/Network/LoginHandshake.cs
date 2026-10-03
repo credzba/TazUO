@@ -495,7 +495,7 @@ namespace ClassicUO.Network
                 AsyncNetClient.Socket.Send_SecondLogin(Account, Password, seed);
                 Log.TraceDebug($"[HandShake] Sent second login.");
 
-                if (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine || Settings.GlobalSettings.CustomServer == Settings.CustomServers.LOCAL_SERVER)
+                if (ServerProfile.TazuoIdentifierEnabled)
                     AsyncNetClient.Socket.Send_TazUO();
             }
             else

@@ -16,25 +16,6 @@ using System.Threading.Tasks;
 
 namespace ClassicUO.Assets
 {
-    public static class CustomServerSettings
-    {
-        public static bool HasCustomAnimPath { get; private set; }
-
-        /// <summary>
-        /// Expects .mul and .idx anim files to be in the same location. This should return a path, not the final file.
-        /// It will add anim#.mul and anim#.idx to this path.
-        /// </summary>
-        public static Func<string> GetCustomAnimPath
-        {
-            get;
-            set
-            {
-                field = value;
-                HasCustomAnimPath = true;
-            }
-        }
-    }
-
     public unsafe sealed class AnimationsLoader : UOFileLoader
     {
         public const int MAX_ACTIONS = 80; // gargoyle is like 78
@@ -88,21 +69,7 @@ namespace ClassicUO.Assets
 
             for (int i = 0; i < _files.Length; i++)
             {
-                if (CustomServerSettings.HasCustomAnimPath)
-                {
-                    string muullocation = CustomServerSettings.GetCustomAnimPath();
-
-                    string pathmul = Path.Combine(muullocation, "anim" + (i == 0 ? string.Empty : (i + 1).ToString()) + ".mul");
-                    string pathidx = Path.Combine(muullocation, "anim" + (i == 0 ? string.Empty : (i + 1).ToString()) + ".idx");
-
-
-                    if (File.Exists(pathmul) && File.Exists(pathidx))
-                        _files[i] = new UOFileMul(pathmul, pathidx);
-                    else
-                        LoadAnimFromUOPath(i);
-                }
-                else
-                    LoadAnimFromUOPath(i);
+                LoadAnimFromUOPath(i);
             }
 
             if (FileManager.IsUOPInstallation)

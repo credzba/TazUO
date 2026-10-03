@@ -220,7 +220,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 offsetY = 283;
                 offtextY = 50;
 
-                if (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+                if (ServerProfile.LoginBrandingEnabled)
                 {
                     Add
                     (

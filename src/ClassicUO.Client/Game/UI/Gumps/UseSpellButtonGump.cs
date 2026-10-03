@@ -160,7 +160,7 @@ namespace ClassicUO.Game.UI.Gumps
 
             if (id >= 201 && id <= 210) return 1060585 + (id - 201);
 
-            if (Settings.GlobalSettings.CustomServer == Settings.CustomServers.Eventine)
+            if (ServerProfile.SpellSchoolsEnabled)
             {
                 if (id >= 301 && id <= 322) return 1063816 + (id - 302);
 
