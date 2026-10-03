@@ -152,6 +152,18 @@ namespace ClassicUO.Game.Data
             {
                 LoadSpellsFromFile(world, path);
             }
+
+            string overrideDirectory = Settings.ResolveOverrideDirectory();
+
+            if (!string.IsNullOrEmpty(overrideDirectory))
+            {
+                path = Path.Combine(overrideDirectory, "spelldef.json");
+
+                if (File.Exists(path))
+                {
+                    LoadSpellsFromFile(world, path);
+                }
+            }
         }
 
         private static void LoadSpellsFromFile(World world, string path)
@@ -163,7 +175,7 @@ namespace ClassicUO.Game.Data
                 if (!File.Exists(path))
                     return;
 
-                List<SpellJson> spells = JsonSerializer.Deserialize(path, SpellJsonContext.Default.ListSpellJson);
+                List<SpellJson> spells = JsonSerializer.Deserialize(File.ReadAllText(path), SpellJsonContext.Default.ListSpellJson);
                 if(spells != null)
                 {
                     foreach (SpellJson spell in spells)
@@ -195,6 +207,13 @@ namespace ClassicUO.Game.Data
                                 break;
                             case "Spellweaving":
                                 SpellsSpellweaving.SetSpell(spell.SpellID, spellDef);
+                                break;
+                            case "Druid":
+                            case "Druidic":
+                                SpellsDruid.SetSpell(spell.SpellID, spellDef);
+                                break;
+                            case "Cleric":
+                                SpellsCleric.SetSpell(spell.SpellID, spellDef);
                                 break;
                             default:
                                 GameActions.Print(world, $"Failed to load a spell, matching school not found for: [{spell.School}]. Spell was {spell.SpellName}({spell.SpellID})");
