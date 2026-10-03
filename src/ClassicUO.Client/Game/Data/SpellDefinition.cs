@@ -162,6 +162,18 @@ namespace ClassicUO.Game.Data
             {
                 LoadSpellsFromFile(path);
             }
+
+            string overrideDirectory = Settings.ResolveOverrideDirectory();
+
+            if (!string.IsNullOrEmpty(overrideDirectory))
+            {
+                path = Path.Combine(overrideDirectory, "spelldef.json");
+
+                if (File.Exists(path))
+                {
+                    LoadSpellsFromFile(path);
+                }
+            }
         }
 
         private static void LoadSpellsFromFile(string path)
@@ -200,6 +212,13 @@ namespace ClassicUO.Game.Data
                                 break;
                             case "Spellweaving":
                                 SpellsSpellweaving.SetSpell(spell.SpellID, spellDef);
+                                break;
+                            case "Druid":
+                            case "Druidic":
+                                SpellsDruid.SetSpell(spell.SpellID, spellDef);
+                                break;
+                            case "Cleric":
+                                SpellsCleric.SetSpell(spell.SpellID, spellDef);
                                 break;
                             default:
                                 GameActions.Print($"Failed to load a spell, matching school not found for: [{spell.School}]. Spell was {spell.SpellName}({spell.SpellID})");
@@ -364,6 +383,43 @@ namespace ClassicUO.Game.Data
                 }
             }
 
+            if (ServerProfile.SpellSchoolsEnabled)
+            {
+                foreach (var entry in SpellsDruid.GetAllSpells)
+                {
+                    if (partialMatch)
+                    {
+                        if (entry.Value.Name.ToLower().Contains(spellName.ToLower()))
+                        {
+                            spell = entry.Value;
+                            return true;
+                        }
+                    }
+                    else if (entry.Value.Name.Equals(spellName, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        spell = entry.Value;
+                        return true;
+                    }
+                }
+
+                foreach (var entry in SpellsCleric.GetAllSpells)
+                {
+                    if (partialMatch)
+                    {
+                        if (entry.Value.Name.ToLower().Contains(spellName.ToLower()))
+                        {
+                            spell = entry.Value;
+                            return true;
+                        }
+                    }
+                    else if (entry.Value.Name.Equals(spellName, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        spell = entry.Value;
+                        return true;
+                    }
+                }
+            }
+
             spell = null;
             return false;
         }
@@ -485,6 +541,19 @@ namespace ClassicUO.Game.Data
             if (fullidx < 300)
             {
                 return SpellsChivalry.GetSpell(fullidx % 100);
+            }
+
+            if (ServerProfile.SpellSchoolsEnabled)
+            {
+                if (fullidx < 340)
+                {
+                    return SpellsDruid.GetSpell((fullidx - 1) % 100);
+                }
+
+                if (fullidx < 400)
+                {
+                    return SpellsCleric.GetSpell((fullidx - 41) % 100);
+                }
             }
 
             if (fullidx < 500)
@@ -697,6 +766,14 @@ namespace ClassicUO.Game.Data
             else if (fullidx < 300)
             {
                 SpellsChivalry.SetSpell(id, in sd);
+            }
+            else if (ServerProfile.SpellSchoolsEnabled && fullidx < 340)
+            {
+                SpellsDruid.SetSpell(id - 1, in sd);
+            }
+            else if (ServerProfile.SpellSchoolsEnabled && fullidx < 400)
+            {
+                SpellsCleric.SetSpell(id - 41, in sd);
             }
             else if (fullidx < 500)
             {

@@ -1021,6 +1021,11 @@ Time left: {1:00}:{2:00}:{3:00}</value>
   <data name="Total" xml:space="preserve">
     <value>Total: </value>
   </data>
+  <data name="Tithing0Mana1MinSkill2" xml:space="preserve">
+    <value>Tithing Cost: {0}
+Mana cost: {1}
+Min. Skill: {2}</value>
+  </data>
   <data name="TithingPointsAvailable" xml:space="preserve">
     <value>Tithing points
 Available: </value>

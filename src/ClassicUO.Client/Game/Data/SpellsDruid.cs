@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 
 // Copyright (c) 2021, andreakarasho
 // All rights reserved.
@@ -30,47 +30,31 @@
 
 #endregion
 
+using System.Collections.Generic;
+
 namespace ClassicUO.Game.Data
 {
-    public enum Reagents
+    internal static class SpellsDruid
     {
-        // britannia reagents
-        BlackPearl,
-        Bloodmoss,
-        Garlic,
-        Ginseng,
-        MandrakeRoot,
-        Nightshade,
-        SulfurousAsh,
-        SpidersSilk,
+        private static readonly Dictionary<int, SpellDefinition> _spellsDict = new Dictionary<int, SpellDefinition>();
 
-        // pagan reagents
-        BatWing,
-        GraveDust,
-        DaemonBlood,
-        NoxCrystal,
-        PigIron,
+        public static string SpellBookName { get; set; } = SpellBookType.Druidic.ToString();
 
-        // Other
-        Bone,
-        FertileDirt,
-        DragonsBlood,
-        DemonBone,
+        public static IReadOnlyDictionary<int, SpellDefinition> GetAllSpells => _spellsDict;
+        internal static int MaxSpellCount => _spellsDict.Count;
 
-        // More extras usable as reagents
-        Blackmoor,
-        Bloodspawn,
-        DeadWood,
-        WyrmHeart,
+        public static SpellDefinition GetSpell(int spellIndex)
+        {
+            if (_spellsDict.TryGetValue(spellIndex, out SpellDefinition spell))
+            {
+                return spell;
+            }
 
-        // Druid reagents for uo eventine, available if other servers want to use them
-        Pumice,
-        PetrifiedWood,
-        SpringWater,
-        FenMoss,
-        DestroyingAngel,
+            return SpellDefinition.EmptySpell;
+        }
 
-        // None
-        None
+        public static void SetSpell(int id, in SpellDefinition newspell) => _spellsDict[id] = newspell;
+
+        internal static void Clear() => _spellsDict.Clear();
     }
 }

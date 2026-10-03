@@ -42,6 +42,8 @@ namespace ClassicUO.Game.Data
         Spellweaving,
         Mysticism,
         Mastery,
+        Druidic, // custom school, data supplied by the server pack
+        Cleric,  // custom school, data supplied by the server pack
         Unknown = 0xFF
     }
 

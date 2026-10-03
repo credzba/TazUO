@@ -4063,6 +4063,17 @@ namespace ClassicUO.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Tithing Cost: {0}
+        ///Mana cost: {1}
+        ///Min. Skill: {2}.
+        /// </summary>
+        public static string Tithing0Mana1MinSkill2 {
+            get {
+                return ResourceManager.GetString("Tithing0Mana1MinSkill2", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Tithing points
         ///Available: .
         /// </summary>
