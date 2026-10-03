@@ -1047,20 +1047,26 @@ namespace ClassicUO.Game.UI.Gumps
                     break;
 
                 case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
-                    maxSpellsCount = SpellsDruid.MaxSpellCount;
-                    bookGraphic = 0x2B18;
-                    minimizedGraphic = 0x2B2D;
-                    iconStartGraphic = 0x5A2A;
+                {
+                    ServerSpellSchool school = ServerProfile.Current?.FindSpellSchool("Druidic");
+                    maxSpellsCount = school?.MaxSpells > 0 ? school.MaxSpells : SpellsDruid.MaxSpellCount;
+                    bookGraphic = ServerProfile.ParseHexOr(school?.BookGump, 0x2B18);
+                    minimizedGraphic = ServerProfile.ParseHexOr(school?.MinimizedGump, 0x2B2D);
+                    iconStartGraphic = ServerProfile.ParseHexOr(school?.IconStart, 0x5A2A);
 
                     break;
+                }
 
                 case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
-                    maxSpellsCount = SpellsCleric.MaxSpellCount;
-                    bookGraphic = 0x2B0E;
-                    minimizedGraphic = 0x2B0C;
-                    iconStartGraphic = 0x59EC;
+                {
+                    ServerSpellSchool school = ServerProfile.Current?.FindSpellSchool("Cleric");
+                    maxSpellsCount = school?.MaxSpells > 0 ? school.MaxSpells : SpellsCleric.MaxSpellCount;
+                    bookGraphic = ServerProfile.ParseHexOr(school?.BookGump, 0x2B0E);
+                    minimizedGraphic = ServerProfile.ParseHexOr(school?.MinimizedGump, 0x2B0C);
+                    iconStartGraphic = ServerProfile.ParseHexOr(school?.IconStart, 0x59EC);
 
                     break;
+                }
             }
 
             spellsOnPage = Math.Min(maxSpellsCount >> 1, 8);
@@ -1117,14 +1123,20 @@ namespace ClassicUO.Game.UI.Gumps
                     break;
 
                 case SpellBookType.Druidic when ServerProfile.SpellSchoolsEnabled:
-                    offset = 1136632;
+                {
+                    ServerSpellSchool school = ServerProfile.Current?.FindSpellSchool("Druidic");
+                    offset = school != null && school.BookClilocBase > 0 ? school.BookClilocBase : 1136632;
 
                     break;
+                }
 
                 case SpellBookType.Cleric when ServerProfile.SpellSchoolsEnabled:
-                    offset = 1136654;
+                {
+                    ServerSpellSchool school = ServerProfile.Current?.FindSpellSchool("Cleric");
+                    offset = school != null && school.BookClilocBase > 0 ? school.BookClilocBase : 1136654;
 
                     break;
+                }
 
                 default:
                     offset = 0;

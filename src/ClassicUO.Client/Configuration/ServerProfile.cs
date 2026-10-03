@@ -100,6 +100,38 @@ namespace ClassicUO.Configuration
             return resolved.ToArray();
         }
 
+        public static bool TryParseHexUShort(string value, out ushort result)
+        {
+            result = 0;
+
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            value = value.Trim();
+
+            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(2);
+            }
+
+            try
+            {
+                result = Convert.ToUInt16(value, 16);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public static ushort ParseHexOr(string value, ushort fallback)
+        {
+            return TryParseHexUShort(value, out ushort parsed) ? parsed : fallback;
+        }
+
         public static ServerProfile Load(string overrideDirectory)
         {
             Current = null;
