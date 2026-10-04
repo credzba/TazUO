@@ -2978,8 +2978,8 @@ You can now type `-updateapi` in game to download the latest API.py file.
 ---
 
 ### MarkTile
-`(x, y, hue, map)`
- Mark a tile with a specific hue.
+`(x, y, hue, map, label)`
+ Mark a tile with a specific hue and optional text label.
 
 
 **Parameters:**
@@ -2990,6 +2990,7 @@ You can now type `-updateapi` in game to download the latest API.py file.
 | `y` | `int` | ❌ No |  |
 | `hue` | `ushort` | ❌ No |  |
 | `map` | `int` | ✅ Yes | Defaults to current map |
+| `label` | `string` | ✅ Yes | Optional text label displayed on the tile |
 
 **Return Type:** `void` *(Does not return anything)*
 
