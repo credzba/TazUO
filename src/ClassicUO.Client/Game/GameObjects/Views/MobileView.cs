@@ -3,6 +3,7 @@
 using ClassicUO.Assets;
 using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
+using ClassicUO.Game.Managers;
 using ClassicUO.Game.Scenes;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Renderer;
@@ -440,10 +441,10 @@ namespace ClassicUO.Game.GameObjects
                                 outlineColor: OutlineColor
                             );
 
-                            if (layer == Layer.Robe && ServerProfile.PaperdollEnabled)
+                            if (layer == PaperdollRules.RobeOverlayLayer && ServerProfile.PaperdollEnabled)
                             {
-                                // Search for item with graphic 0xA413
-                                Item aboveRobe = GetItemByGraphic(0xA413);
+                                // Draw the profile's paperdoll overlay item (default: the quiver) above the robe.
+                                Item aboveRobe = GetItemByGraphic(PaperdollRules.RobeOverlayGraphic);
 
                                 if (aboveRobe != null)
                                 {
@@ -1302,6 +1303,14 @@ namespace ClassicUO.Game.GameObjects
             return false;
         }
 
+        /// <summary>
+        ///     Vanilla clients hide Pants and Shoes when a Legs layer item exists. Server packs can opt out
+        ///     through paperdoll.covered.legsSkip; the built-in paperdoll behavior skips the rule.
+        /// </summary>
+        private static bool LegsHidePants(Mobile mobile) =>
+            mobile.FindItemByLayer(Layer.Legs) != null
+            && (!ServerProfile.PaperdollEnabled || !PaperdollRules.LegsSkip);
+
         internal static bool IsCovered(Mobile mobile, Layer layer)
         {
             if (mobile.IsEmpty)
@@ -1315,12 +1324,8 @@ namespace ClassicUO.Game.GameObjects
                     Item pants = mobile.FindItemByLayer(Layer.Pants);
                     Item robe;
 
-                    //Eventine ignores pants layers
-                    if ((!ServerProfile.PaperdollEnabled && mobile.FindItemByLayer(Layer.Legs) != null)
-                        || pants != null
-                        && (
-                            pants.Graphic == 0x1411 /*|| pants.Graphic == 0x141A*/
-                        )
+                    if (LegsHidePants(mobile)
+                        || pants != null && PaperdollRules.IsCoveringPants(pants.Graphic)
                     )
                     {
                         return true;
@@ -1331,7 +1336,7 @@ namespace ClassicUO.Game.GameObjects
 
                         if (
                             pants != null && (pants.Graphic == 0x0513 || pants.Graphic == 0x0514)
-                            || robe != null && robe.Graphic == 0x0504
+                            || robe != null && PaperdollRules.IsCoveringRobe(robe.Graphic)
                         )
                         {
                             return true;
@@ -1345,9 +1350,8 @@ namespace ClassicUO.Game.GameObjects
                     robe = mobile.FindItemByLayer(Layer.Robe);
                     pants = mobile.FindItemByLayer(Layer.Pants);
 
-                    //Eventine ignores pants layers
-                    if ((!ServerProfile.PaperdollEnabled && mobile.FindItemByLayer(Layer.Legs) != null)
-                        || robe != null && robe.Graphic == 0x0504
+                    if (LegsHidePants(mobile)
+                        || robe != null && PaperdollRules.IsCoveringRobe(robe.Graphic)
                     )
                     {
                         return true;
@@ -1385,14 +1389,9 @@ namespace ClassicUO.Game.GameObjects
                     robe = mobile.FindItemByLayer(Layer.Robe);
                     Item tunic = mobile.FindItemByLayer(Layer.Tunic);
 
-                    if (tunic != null && tunic.Graphic == 0x0238)
+                    if (tunic != null && PaperdollRules.IsTunicSpecial(tunic.Graphic))
                     {
-                        return robe != null
-                            && robe.Graphic != 0x9985
-                            && robe.Graphic != 0x9986
-                            && robe.Graphic != 0xA412
-                            && robe.Graphic != 0xA2CB
-                            && robe.Graphic != 0xA2CA;
+                        return robe != null && !PaperdollRules.IsRobeException(robe.Graphic);
                     }
 
                     break;
@@ -1400,15 +1399,7 @@ namespace ClassicUO.Game.GameObjects
                 case Layer.Torso:
                     robe = mobile.FindItemByLayer(Layer.Robe);
 
-                    if (
-                        robe != null
-                        && robe.Graphic != 0
-                        && robe.Graphic != 0x9985
-                        && robe.Graphic != 0x9986
-                        && robe.Graphic != 0xA412
-                        && robe.Graphic != 0xA2CB
-                        && robe.Graphic != 0xA2CA
-                    )
+                    if (robe != null && robe.Graphic != 0 && !PaperdollRules.IsRobeException(robe.Graphic))
                     {
                         return true;
                     }
@@ -1420,10 +1411,7 @@ namespace ClassicUO.Game.GameObjects
                         {
                             Item torso = mobile.FindItemByLayer(Layer.Torso);
 
-                            if (
-                                torso != null
-                                && (torso.Graphic == 0x782A || torso.Graphic == 0x782B)
-                            )
+                            if (torso != null && PaperdollRules.IsTorsoSpecial(torso.Graphic))
                             {
                                 return true;
                             }
@@ -1437,11 +1425,7 @@ namespace ClassicUO.Game.GameObjects
 
                     return robe != null
                         && robe.Graphic != 0
-                        && robe.Graphic != 0x9985
-                        && robe.Graphic != 0x9986
-                        && robe.Graphic != 0xA412
-                        && robe.Graphic != 0xA2CB
-                        && robe.Graphic != 0xA2CA;
+                        && !PaperdollRules.IsRobeException(robe.Graphic);
 
                 case Layer.Helmet:
                 case Layer.Hair:

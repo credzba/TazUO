@@ -39,9 +39,9 @@ internal static class OpenContainer
         if (world.Player == null)
             return;
 
-            if (ServerProfile.EventineOpenContainerEnabled)
+            if (ServerProfile.CustomOpenContainerEnabled)
         {
-            ReceiveEventine(world, ref p);
+            ReceiveCustomOpenContainer(world, ref p);
             return;
         }
 
@@ -232,7 +232,7 @@ internal static class OpenContainer
         }
     }
 
-    private static void ReceiveEventine(World world, ref StackDataReader p)
+    private static void ReceiveCustomOpenContainer(World world, ref StackDataReader p)
     {
         uint serial = p.ReadUInt32BE();
         ushort graphic = p.ReadUInt16BE();
@@ -367,7 +367,7 @@ internal static class OpenContainer
                         if (graphic == 10009 || (graphic >= 10060 && graphic <= 10081) || (graphic >= 10258 && graphic <= 10291) || graphic == 11000 || graphic == 11156 || graphic == 11415 || graphic == 11417 || graphic == 11422 || (graphic >= 11747 && graphic <= 11750) || (graphic >= 11765 && graphic <= 11770) || (graphic >= 19800 && graphic <= 19835) || graphic == 29724 || graphic == 40558 || graphic == 40560 || graphic == 40562 || graphic == 40586 || graphic == 49922 || graphic == 49934 || graphic == 50138 || (graphic >= 50153 && graphic <= 50167) || (graphic >= 50246 && graphic == 50250) || (graphic >= 50298 && graphic == 50300))
                             graphic -= 10000;
 
-                        EventineUpdateLargeContainerGraphics(ref graphic);
+                        UpdateLargeContainerGraphics(ref graphic);
 
                         if (graphic == 1009 || graphic == 20724 || graphic == 1081 || graphic == 1278 || graphic == 2417 || (graphic >= 1060 && graphic <= 1068) || (graphic >= 1071 && graphic <= 1079) || (graphic >= 1258 && graphic <= 1270) || (graphic >= 1282 && graphic <= 1291) || (graphic >= 1071 && graphic <= 1079))
                             graphic -= 1000;
@@ -448,67 +448,11 @@ internal static class OpenContainer
     {
         Gump gumps = Client.Game.UO.Gumps;
 
-        switch (graphic)
+        if (ServerProfile.TryGetContainerGumpOverride(graphic, out ushort mapped) && gumps.GetGump(mapped).Texture != null)
         {
-            case 0x0048:
-                if (gumps.GetGump(0x06E8).Texture != null)
-                    graphic = 0x06E8;
-
-                break;
-
-            case 0x0049:
-                if (gumps.GetGump(0x9CDF).Texture != null)
-                    graphic = 0x9CDF;
-
-                break;
-
-            case 0x0051:
-                if (gumps.GetGump(0x06E7).Texture != null)
-                    graphic = 0x06E7;
-
-                break;
-
-            case 0x003E:
-                if (gumps.GetGump(0x06E9).Texture != null)
-                    graphic = 0x06E9;
-
-                break;
-
-            case 0x004D:
-                if (gumps.GetGump(0x06EA).Texture != null)
-                    graphic = 0x06EA;
-
-                break;
-
-            case 0x004E:
-                if (gumps.GetGump(0x06E6).Texture != null)
-                    graphic = 0x06E6;
-
-                break;
-
-            case 0x004F:
-                if (gumps.GetGump(0x06E5).Texture != null)
-                    graphic = 0x06E5;
-
-                break;
-
-            case 0x004A:
-                if (gumps.GetGump(0x9CDD).Texture != null)
-                    graphic = 0x9CDD;
-
-                break;
-
-            case 0x0044:
-                if (gumps.GetGump(0x9CE3).Texture != null)
-                    graphic = 0x9CE3;
-
-                break;
+            graphic = mapped;
+            return;
         }
-    }
-
-    private static void EventineUpdateLargeContainerGraphics(ref ushort graphic)
-    {
-        Gump gumps = Client.Game.UO.Gumps;
 
         switch (graphic)
         {
@@ -563,30 +507,6 @@ internal static class OpenContainer
             case 0x0044:
                 if (gumps.GetGump(0x9CE3).Texture != null)
                     graphic = 0x9CE3;
-
-                break;
-
-            case 0x0042:
-                if (gumps.GetGump(0x9D6C).Texture != null)
-                    graphic = 0x9D6C;
-
-                break;
-
-            case 19724:
-                if (gumps.GetGump(0x9D6C).Texture != null)
-                    graphic = 0x9D6C;
-
-                break;
-
-            case 75:
-                if (gumps.GetGump(0x9D6B).Texture != null)
-                    graphic = 0x9D6B;
-
-                break;
-
-            case 67:
-                if (gumps.GetGump(0x9D6A).Texture != null)
-                    graphic = 0x9D6A;
 
                 break;
         }

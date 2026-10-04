@@ -1,4 +1,5 @@
-﻿using ClassicUO.Utility;
+﻿using ClassicUO.Configuration;
+using ClassicUO.Utility;
 using ClassicUO.Utility.Logging;
 using System;
 using System.Collections.Generic;
@@ -18,6 +19,21 @@ namespace ClassicUO.Game.Data
             if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);
+            }
+
+            // A server pack can ship its own chair table (relative to the override directory).
+            if (ServerProfile.ChairsEnabled)
+            {
+                string overrideDirectory = Settings.ResolveOverrideDirectory();
+                string packFile = !string.IsNullOrEmpty(overrideDirectory)
+                    ? Path.Combine(overrideDirectory, ServerProfile.Current?.Chairs?.File ?? "chair.txt")
+                    : null;
+
+                if (packFile != null && File.Exists(packFile) && TryLoad(packFile))
+                {
+                    Log.Info($"[ChairTable] Loaded chair table from server pack: {packFile}");
+                    return;
+                }
             }
 
             string chair = Path.Combine(path, "chair.txt");
@@ -42,9 +58,19 @@ namespace ClassicUO.Game.Data
                 }
             }
 
+            if (!TryLoad(chair))
+            {
+                LoadDefaults();
+            }
+        }
+
+        private static bool TryLoad(string file)
+        {
             try
             {
-                var chairParse = new TextFileParser(File.ReadAllText(chair), new[] { ' ', '\t', ',' }, new[] { '#', ';' }, new[] { '"', '"' });
+                Table.Clear();
+
+                var chairParse = new TextFileParser(File.ReadAllText(file), new[] { ' ', '\t', ',' }, new[] { '#', ';' }, new[] { '"', '"' });
 
                 while (!chairParse.IsEOF())
                 {
@@ -60,14 +86,16 @@ namespace ClassicUO.Game.Data
                         sbyte.TryParse(ss[5], out sbyte offsetY);
                         sbyte.TryParse(ss[6], out sbyte mirrorOffsetY);
 
-                        Table.Add(graphic, new SittingInfoData(graphic, d1, d2, d3, d4, offsetY, mirrorOffsetY, false));
+                        Table[graphic] = new SittingInfoData(graphic, d1, d2, d3, d4, offsetY, mirrorOffsetY, false);
                     }
                 }
+
+                return true;
             }
             catch (Exception e)
             {
-                Log.Warn($"[ChairTable] Could not read '{chair}': {e.Message}. Using in-memory defaults.");
-                LoadDefaults();
+                Log.Warn($"[ChairTable] Could not read '{file}': {e.Message}. Using in-memory defaults.");
+                return false;
             }
         }
 

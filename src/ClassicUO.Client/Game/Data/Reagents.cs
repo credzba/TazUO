@@ -33,7 +33,7 @@ namespace ClassicUO.Game.Data
         DeadWood,
         WyrmHeart,
 
-        // Druid reagents for uo eventine, available if other servers want to use them
+        // Custom reagents that server packs can reference by name
         Pumice,
         PetrifiedWood,
         SpringWater,

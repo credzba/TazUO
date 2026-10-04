@@ -17,87 +17,6 @@ namespace ClassicUO.Game.UI.Controls
 {
     public class PaperDollInteractable : Control
     {
-        private static readonly Layer[] _layerOrder =
-        [
-            Layer.Cloak,
-            Layer.Shirt,
-            Layer.Pants,
-            Layer.Shoes,
-            Layer.Legs,
-            Layer.Arms,
-            Layer.Torso,
-            Layer.Tunic,
-            Layer.Ring,
-            Layer.Bracelet,
-            Layer.Face,
-            Layer.Gloves,
-            Layer.Skirt,
-            Layer.Robe,
-            Layer.Waist,
-            Layer.Neck,
-            Layer.Hair,
-            Layer.Beard,
-            Layer.Earrings,
-            Layer.Helmet,
-            Layer.OneHanded,
-            Layer.TwoHanded,
-            Layer.Talisman
-        ];
-
-        private static readonly Layer[] _layerOrderQuiverFix =
-        [
-            Layer.Shirt,
-            Layer.Pants,
-            Layer.Shoes,
-            Layer.Legs,
-            Layer.Arms,
-            Layer.Torso,
-            Layer.Tunic,
-            Layer.Ring,
-            Layer.Bracelet,
-            Layer.Face,
-            Layer.Gloves,
-            Layer.Skirt,
-            Layer.Robe,
-            Layer.Cloak,
-            Layer.Waist,
-            Layer.Neck,
-            Layer.Hair,
-            Layer.Beard,
-            Layer.Earrings,
-            Layer.Helmet,
-            Layer.OneHanded,
-            Layer.TwoHanded,
-            Layer.Talisman
-        ];
-
-        private static readonly Layer[] _layerOrderParrotFix =
-        [
-            Layer.Shirt,
-            Layer.Pants,
-            Layer.Shoes,
-            Layer.Legs,
-            Layer.Arms,
-            Layer.Torso,
-            Layer.Tunic,
-            Layer.Cloak,
-            Layer.Ring,
-            Layer.Bracelet,
-            Layer.Face,
-            Layer.Gloves,
-            Layer.Skirt,
-            Layer.Waist,
-            Layer.Neck,
-            Layer.Hair,
-            Layer.Beard,
-            Layer.Earrings,
-            Layer.Helmet,
-            Layer.OneHanded,
-            Layer.TwoHanded,
-            Layer.Talisman,
-            Layer.Robe
-        ];
-
         private readonly PaperDollGump _paperDollGump;
 
         private bool _updateUi;
@@ -406,7 +325,24 @@ namespace ClassicUO.Game.UI.Controls
         /// <returns>A <b>reference</b> to the relevant static layers order member</returns>
         private Layer[] GetLayers(Mobile mob)
         {
-            const int CLOAK_GRAPHIC = 0xA413;
+            if (ServerProfile.PaperdollEnabled)
+            {
+                ItemHold dragged = null;
+
+                if (HasFakeItem
+                    && Client.Game.UO.GameCursor.ItemHold.Enabled
+                    && !Client.Game.UO.GameCursor.ItemHold.IsFixedPosition)
+                {
+                    dragged = Client.Game.UO.GameCursor.ItemHold;
+                }
+
+                if (PaperdollRules.TrySelectOrder(mob, dragged, out Layer[] profileOrder))
+                {
+                    return profileOrder;
+                }
+            }
+
+            const int CLOAK_GRAPHIC = PaperdollRules.DefaultCloakGraphic;
 
             Item cloak = mob.FindItemByLayer(Layer.Cloak);
             Item robe = mob.FindItemByLayer(Layer.Robe);
@@ -414,35 +350,35 @@ namespace ClassicUO.Game.UI.Controls
             if (cloak != null)
             {
                 if (robe != null && robe.Graphic is 0xA2CA or 0xA2CB) // parrot
-                    return _layerOrderParrotFix;
+                    return PaperdollRules.ParrotFixOrder;
 
                 if (cloak.ItemData.IsContainer ||
                     (ServerProfile.PaperdollEnabled &&
                      cloak.Graphic == CLOAK_GRAPHIC)
                    )
-                    return _layerOrderQuiverFix;
+                    return PaperdollRules.QuiverFixOrder;
 
-                return _layerOrder;
+                return PaperdollRules.DefaultOrder;
             }
 
             if (!HasFakeItem
                 || !Client.Game.UO.GameCursor.ItemHold.Enabled
                 || Client.Game.UO.GameCursor.ItemHold.IsFixedPosition
                 || (byte)Layer.Cloak != Client.Game.UO.GameCursor.ItemHold.ItemData.Layer)
-                return _layerOrder;
+                return PaperdollRules.DefaultOrder;
 
 
-            bool isEventineCloak = ServerProfile.PaperdollEnabled
+            bool isServerCloak = ServerProfile.PaperdollEnabled
                                    && Client.Game.UO.GameCursor.ItemHold.Graphic == CLOAK_GRAPHIC;
 
-            return Client.Game.UO.GameCursor.ItemHold.ItemData.IsContainer || isEventineCloak
-                ? _layerOrderQuiverFix
-                : _layerOrder;
+            return Client.Game.UO.GameCursor.ItemHold.ItemData.IsContainer || isServerCloak
+                ? PaperdollRules.QuiverFixOrder
+                : PaperdollRules.DefaultOrder;
         }
 
         /// <summary>
-        /// Returns an ordered copy of the given layer array
-        /// This allows for customizations for servers like Eventine where layers may deviate from the standard order.
+        /// Returns an ordered copy of the given layer array.
+        /// Server packs can deviate from the standard order through the paperdoll profile section.
         /// </summary>
         /// <remarks>
         /// The overhead for the copy here should be imperceptible, but if necessary, the hot flow
@@ -489,9 +425,9 @@ namespace ClassicUO.Game.UI.Controls
 				}
 			}
 
-            // When dealing with Eventine, the 'legs' layer is always the first one.
-            // Other server-specific ordering quirks can be added here later as necessary.
-            if (!ServerProfile.PaperdollEnabled || !(layers?.Length > 2))
+            // Servers that want the 'legs' layer drawn first can either provide their own layerOrders
+            // entry or rely on this built-in adjustment. Profile-defined orders are used verbatim.
+            if (!ServerProfile.PaperdollEnabled || !PaperdollRules.IsBuiltInOrder(layers) || !(layers?.Length > 2))
                 return copy;
 
             int legsLayerIdx = copy.IndexOf(Layer.Legs);

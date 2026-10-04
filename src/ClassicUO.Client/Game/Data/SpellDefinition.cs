@@ -411,7 +411,7 @@ namespace ClassicUO.Game.Data
 
             if (fullidx < 300) return SpellsChivalry.GetSpell(fullidx % 100);
 
-            #region Custom eventine spells
+            #region Custom spell schools
             if (ServerProfile.SpellSchoolsEnabled)
             {
                 if (fullidx < 340 ) return SpellsDruid.GetSpell((fullidx - 1) % 100);
@@ -587,7 +587,7 @@ namespace ClassicUO.Game.Data
                     SpellsChivalry.SetSpell(id, in sd);
                     break;
 
-                #region Custom eventine spells
+                #region Custom spell schools
                 case < 340 when ServerProfile.SpellSchoolsEnabled:
                     SpellsDruid.SetSpell(id - 1, in sd);
                     break;

@@ -12,8 +12,8 @@ namespace ClassicUO.Game.Data
         Spellweaving,
         Mysticism,
         Mastery,
-        Druidic, //custom for uo eventine could be used for others implementing it
-        Cleric, //custom for uo eventine could be used for others implementing it
+        Druidic, // custom spell school provided by the server pack
+        Cleric, // custom spell school provided by the server pack
         Unknown = 0xFF
     }
 

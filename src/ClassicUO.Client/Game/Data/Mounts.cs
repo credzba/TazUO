@@ -88,7 +88,7 @@ internal static class Mounts
         _mounts[0x3EE2] = new(0x0679, 0x3EE2, -10); // Horse_Elemental_Air
         _mounts[0x3EE4] = new(0x06C1, 0x3EE4, -4); // Horse_True_Britannia
 
-        //Load custom mounts for Eventine
+        // Load custom mounts from the server pack
         if (ServerProfile.MountsEnabled)
             LoadMountsDef();
 

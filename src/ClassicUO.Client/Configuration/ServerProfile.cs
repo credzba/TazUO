@@ -20,7 +20,7 @@ namespace ClassicUO.Configuration
         private static readonly HashSet<string> _knownRootProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "profileVersion", "name", "assetPaths", "features", "spellSchools",
-            "containers", "mounts", "chairs", "paperdoll", "cursor", "reagents", "strings"
+            "containers", "containerGraphics", "mounts", "chairs", "paperdoll", "cursor", "reagents", "strings"
         };
 
         public static ServerProfile Current { get; private set; }
@@ -31,6 +31,7 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("features")] public ServerProfileFeatures Features { get; set; } = new ServerProfileFeatures();
         [JsonPropertyName("spellSchools")] public List<ServerSpellSchool> SpellSchools { get; set; } = new List<ServerSpellSchool>();
         [JsonPropertyName("containers")] public List<ServerContainerInfo> Containers { get; set; } = new List<ServerContainerInfo>();
+        [JsonPropertyName("containerGraphics")] public Dictionary<string, string> ContainerGraphics { get; set; }
         [JsonPropertyName("mounts")] public ServerMountsInfo Mounts { get; set; }
         [JsonPropertyName("chairs")] public ServerChairsInfo Chairs { get; set; }
         [JsonPropertyName("paperdoll")] public ServerPaperdollInfo Paperdoll { get; set; }
@@ -46,7 +47,7 @@ namespace ClassicUO.Configuration
         public static bool SpellSchoolsEnabled => Current?.SpellSchools != null && Current.SpellSchools.Count > 0;
         public static bool TazuoIdentifierEnabled => Current?.Features?.Network?.TazuoIdentifier == true;
         public static bool DisableFeaturesEnabled => Current?.Features?.Network?.DisableFeatures == true;
-        public static bool EventineOpenContainerEnabled => Current?.Features?.Network?.EventineOpenContainer == true;
+        public static bool CustomOpenContainerEnabled => Current?.Features?.Network?.CustomOpenContainer == true;
         public static bool LoginBrandingEnabled => Current?.Features?.Login?.Branding == true;
         public static bool ClientVerifierEnabled => Current?.Features?.Network?.ClientVerifier != null;
 
@@ -132,9 +133,47 @@ namespace ClassicUO.Configuration
             return TryParseHexUShort(value, out ushort parsed) ? parsed : fallback;
         }
 
+        private static Dictionary<ushort, ushort> _containerGumpCache;
+
+        /// <summary>
+        ///     Resolves a container graphic to the gump graphic the pack wants it drawn with.
+        ///     Returns false when the pack declares no mapping for the graphic, so callers can use their built-in table.
+        /// </summary>
+        public static bool TryGetContainerGumpOverride(ushort graphic, out ushort gumpGraphic)
+        {
+            gumpGraphic = 0;
+
+            Dictionary<string, string> map = Current?.ContainerGraphics;
+
+            if (map == null || map.Count == 0)
+            {
+                return false;
+            }
+
+            if (_containerGumpCache == null)
+            {
+                _containerGumpCache = new Dictionary<ushort, ushort>();
+
+                foreach (KeyValuePair<string, string> entry in map)
+                {
+                    if (TryParseHexUShort(entry.Key, out ushort from) && TryParseHexUShort(entry.Value, out ushort to))
+                    {
+                        _containerGumpCache[from] = to;
+                    }
+                    else
+                    {
+                        Log.Warn($"Server profile containerGraphics entry '{entry.Key}': '{entry.Value}' is not a graphic id and was ignored.");
+                    }
+                }
+            }
+
+            return _containerGumpCache.TryGetValue(graphic, out gumpGraphic);
+        }
+
         public static ServerProfile Load(string overrideDirectory)
         {
             Current = null;
+            _containerGumpCache = null;
 
             if (string.IsNullOrEmpty(overrideDirectory))
             {
@@ -213,7 +252,7 @@ namespace ClassicUO.Configuration
     {
         [JsonPropertyName("tazuoIdentifier")] public bool TazuoIdentifier { get; set; }
         [JsonPropertyName("disableFeatures")] public bool DisableFeatures { get; set; }
-        [JsonPropertyName("eventineOpenContainer")] public bool EventineOpenContainer { get; set; }
+        [JsonPropertyName("customOpenContainer")] public bool CustomOpenContainer { get; set; }
         [JsonPropertyName("clientVerifier")] public ServerClientVerifier ClientVerifier { get; set; }
     }
 
@@ -305,7 +344,10 @@ namespace ClassicUO.Configuration
     public class ServerLayerOrderRule
     {
         [JsonPropertyName("order")] public string Order { get; set; }
+        [JsonPropertyName("cloakEquipped")] public bool? CloakEquipped { get; set; }
         [JsonPropertyName("cloakGraphic")] public string CloakGraphic { get; set; }
+        [JsonPropertyName("equippedCloakIsContainer")] public bool? EquippedCloakIsContainer { get; set; }
+        [JsonPropertyName("robeGraphics")] public List<string> RobeGraphics { get; set; }
         [JsonPropertyName("draggedGraphics")] public List<string> DraggedGraphics { get; set; }
         [JsonPropertyName("draggedIsContainer")] public bool? DraggedIsContainer { get; set; }
         [JsonPropertyName("helmetGraphics")] public List<string> HelmetGraphics { get; set; }
@@ -319,7 +361,7 @@ namespace ClassicUO.Configuration
 
     public class ServerCoveredRules
     {
-        [JsonPropertyName("legsSkip")] public bool LegsSkip { get; set; }
+        [JsonPropertyName("legsSkip")] public bool? LegsSkip { get; set; }
         [JsonPropertyName("robeGraphics")] public List<string> RobeGraphics { get; set; }
         [JsonPropertyName("robeExceptions")] public List<string> RobeExceptions { get; set; }
         [JsonPropertyName("pantsGraphics")] public List<string> PantsGraphics { get; set; }

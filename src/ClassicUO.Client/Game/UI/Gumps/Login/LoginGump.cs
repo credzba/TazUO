@@ -222,14 +222,37 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
                 if (ServerProfile.LoginBrandingEnabled)
                 {
-                    Add
-                    (
-                        new Label(TazLang.Get("eventineshard"), false, 0xFFFF, font: 9)
-                        {
-                            X = 242,
-                            Y = 5
-                        }
-                    );
+                    string shardLabel = ServerProfile.Current?.Features?.Login?.ShardLabel;
+
+                    if (!string.IsNullOrWhiteSpace(shardLabel))
+                    {
+                        Add
+                        (
+                            new Label(shardLabel, false, 0xFFFF, font: 9)
+                            {
+                                X = 242,
+                                Y = 5
+                            }
+                        );
+                    }
+
+                    string loginVersion = ServerProfile.Current?.Strings?.LoginVersion;
+
+                    if (!string.IsNullOrWhiteSpace(loginVersion))
+                    {
+                        loginVersion = loginVersion.Replace(
+                            "{0}",
+                            (ServerProfile.Current?.Features?.Network?.ClientVerifier?.Version ?? 0).ToString());
+
+                        Add
+                        (
+                            new Label(loginVersion, false, 0xFFFF, font: 9)
+                            {
+                                X = 242,
+                                Y = 18
+                            }
+                        );
+                    }
                 }
 
                 Add
@@ -493,20 +516,37 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
             c.Add(new ContextMenuItemEntry(TazLang.Get("tuowebsite"), () =>
             {
-                PlatformHelper.LaunchBrowser("https://tazuo.org");
+                PlatformHelper.LaunchBrowser(BrandedUrl("website", "https://tazuo.org"));
             }, true, false));
 
             c.Add(new ContextMenuItemEntry(TazLang.Get("tuodiscord"), () =>
             {
-                PlatformHelper.LaunchBrowser("https://discord.gg/QvqzkB95G4");
+                PlatformHelper.LaunchBrowser(BrandedUrl("discord", "https://discord.gg/QvqzkB95G4"));
             }, true, false));
 
             c.Add(new ContextMenuItemEntry(TazLang.Get("cuowebsite"), () =>
             {
-                PlatformHelper.LaunchBrowser("https://www.classicuo.eu");
+                PlatformHelper.LaunchBrowser(BrandedUrl("classicuo", "https://www.classicuo.eu"));
             }, true, false));
 
             return c;
+        }
+
+        /// <summary>
+        ///     Returns the server pack's branded URL for the given key when branding is enabled,
+        ///     otherwise the client's default URL.
+        /// </summary>
+        private static string BrandedUrl(string key, string fallback)
+        {
+            if (ServerProfile.LoginBrandingEnabled
+                && ServerProfile.Current?.Strings?.Urls != null
+                && ServerProfile.Current.Strings.Urls.TryGetValue(key, out string url)
+                && !string.IsNullOrWhiteSpace(url))
+            {
+                return url;
+            }
+
+            return fallback;
         }
 
         private void OpenEditSettings()
