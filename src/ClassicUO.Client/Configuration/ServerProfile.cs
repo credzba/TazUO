@@ -338,7 +338,18 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("layerOrderRules")] public List<ServerLayerOrderRule> LayerOrderRules { get; set; } = new List<ServerLayerOrderRule>();
         [JsonPropertyName("robeOverlay")] public ServerRobeOverlay RobeOverlay { get; set; }
         [JsonPropertyName("covered")] public ServerCoveredRules Covered { get; set; }
+        [JsonPropertyName("renderOrder")] public ServerRenderOrderInfo RenderOrder { get; set; }
         [JsonPropertyName("backpackGraphics")] public Dictionary<string, string> BackpackGraphics { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     Named layer orders and ordered selection rules used by the in-world render order
+    ///     (as opposed to the paperdoll gump). Same shape as the paperdoll rules.
+    /// </summary>
+    public class ServerRenderOrderInfo
+    {
+        [JsonPropertyName("layerOrders")] public Dictionary<string, List<string>> LayerOrders { get; set; } = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        [JsonPropertyName("layerOrderRules")] public List<ServerLayerOrderRule> LayerOrderRules { get; set; } = new List<ServerLayerOrderRule>();
     }
 
     public class ServerLayerOrderRule
@@ -346,10 +357,12 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("order")] public string Order { get; set; }
         [JsonPropertyName("cloakEquipped")] public bool? CloakEquipped { get; set; }
         [JsonPropertyName("cloakGraphic")] public string CloakGraphic { get; set; }
+        [JsonPropertyName("cloakGraphics")] public List<string> CloakGraphics { get; set; }
         [JsonPropertyName("equippedCloakIsContainer")] public bool? EquippedCloakIsContainer { get; set; }
         [JsonPropertyName("robeGraphics")] public List<string> RobeGraphics { get; set; }
         [JsonPropertyName("draggedGraphics")] public List<string> DraggedGraphics { get; set; }
         [JsonPropertyName("draggedIsContainer")] public bool? DraggedIsContainer { get; set; }
+        [JsonPropertyName("draggedLayer")] public string DraggedLayer { get; set; }
         [JsonPropertyName("helmetGraphics")] public List<string> HelmetGraphics { get; set; }
     }
 
@@ -367,6 +380,7 @@ namespace ClassicUO.Configuration
         [JsonPropertyName("pantsGraphics")] public List<string> PantsGraphics { get; set; }
         [JsonPropertyName("tunicGraphics")] public List<string> TunicGraphics { get; set; }
         [JsonPropertyName("torsoGraphics")] public List<string> TorsoGraphics { get; set; }
+        [JsonPropertyName("helmetBypassGraphics")] public List<string> HelmetBypassGraphics { get; set; }
     }
 
     public class ServerCursorInfo

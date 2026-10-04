@@ -175,7 +175,9 @@ namespace ClassicUO.Game.UI.Controls
 
                 if (equipItem != null)
                 {
-                    if (Mobile.IsCovered(mobile, layer))
+                    bool isBypassHelmet = layer == Layer.Helmet && PaperdollRules.IsHelmetBypass(equipItem.Graphic);
+
+                    if (!isBypassHelmet && Mobile.IsCovered(mobile, layer))
                     {
                         continue;
                     }

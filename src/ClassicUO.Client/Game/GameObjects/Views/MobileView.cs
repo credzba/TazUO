@@ -359,9 +359,12 @@ namespace ClassicUO.Game.GameObjects
 
             if (!IsEmpty)
             {
-                for (int i = 0; i < Constants.USED_LAYER_COUNT; i++)
+                Layer[] profileOrder = GetProfileRenderOrder();
+                int layerCount = profileOrder?.Length ?? Constants.USED_LAYER_COUNT;
+
+                for (int i = 0; i < layerCount; i++)
                 {
-                    Layer layer = LayerOrder.UsedLayers[layerDir, i];
+                    Layer layer = profileOrder != null ? profileOrder[i] : LayerOrder.UsedLayers[layerDir, i];
 
                     Item item = FindItemByLayer(layer);
 
@@ -1236,9 +1239,12 @@ namespace ClassicUO.Game.GameObjects
 
             if (!IsEmpty && isHuman)
             {
-                for (int i = 0; i < Constants.USED_LAYER_COUNT; i++)
+                Layer[] profileOrder = GetProfileRenderOrder();
+                int layerCount = profileOrder?.Length ?? Constants.USED_LAYER_COUNT;
+
+                for (int i = 0; i < layerCount; i++)
                 {
-                    Layer layer = LayerOrder.UsedLayers[layerDir, i];
+                    Layer layer = profileOrder != null ? profileOrder[i] : LayerOrder.UsedLayers[layerDir, i];
                     Item item = FindItemByLayer(layer);
 
                     if (
@@ -1301,6 +1307,20 @@ namespace ClassicUO.Game.GameObjects
             }
 
             return false;
+        }
+
+        /// <summary>
+        ///     Returns the server pack's in-world render order when it defines one, otherwise null so callers
+        ///     fall back to the default <see cref="LayerOrder.UsedLayers" /> table.
+        /// </summary>
+        private Layer[] GetProfileRenderOrder()
+        {
+            if (!ServerProfile.PaperdollEnabled)
+            {
+                return null;
+            }
+
+            return PaperdollRules.TrySelectRenderOrder(this, out Layer[] order) ? order : null;
         }
 
         /// <summary>

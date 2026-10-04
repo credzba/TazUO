@@ -105,23 +105,24 @@ namespace ClassicUO.Game.Managers
 
         private static bool _compiled;
 
-        private static Dictionary<string, Layer[]> _orders;
-        private static List<Rule> _rules;
+        private static RuleSet _doll;
+        private static RuleSet _render;
         private static Layer _robeOverlayLayer = DefaultRobeOverlayLayer;
         private static ushort _robeOverlayGraphic = DefaultRobeOverlayGraphic;
         private static bool? _legsSkip;
-        private static HashSet<ushort> _robeGraphics;
-        private static HashSet<ushort> _robeExceptions;
-        private static HashSet<ushort> _pantsGraphics;
-        private static HashSet<ushort> _tunicGraphics;
-        private static HashSet<ushort> _torsoGraphics;
+        private static GraphicSet _robeGraphics;
+        private static GraphicSet _robeExceptions;
+        private static GraphicSet _pantsGraphics;
+        private static GraphicSet _tunicGraphics;
+        private static GraphicSet _torsoGraphics;
+        private static GraphicSet _helmetBypass;
 
         public static bool HasLayerRules
         {
             get
             {
                 Compile();
-                return _rules != null && _rules.Count > 0;
+                return _doll?.Rules is { Count: > 0 };
             }
         }
 
@@ -189,6 +190,13 @@ namespace ClassicUO.Game.Managers
             return _torsoGraphics.Contains(graphic);
         }
 
+        /// <summary>Special helmets that keep rendering on the doll even when a robe would cover them.</summary>
+        public static bool IsHelmetBypass(ushort graphic)
+        {
+            Compile();
+            return _helmetBypass.Contains(graphic);
+        }
+
         /// <summary>
         ///     Resolves an order name to a layer array. Profile <c>layerOrders</c> win; otherwise the built-in
         ///     names <c>default</c>, <c>quiverFix</c> and <c>parrotFix</c> are used. Returns null for unknown names.
@@ -196,25 +204,7 @@ namespace ClassicUO.Game.Managers
         public static Layer[] GetOrder(string name)
         {
             Compile();
-
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                return null;
-            }
-
-            if (_orders != null && _orders.TryGetValue(name, out Layer[] profileOrder))
-            {
-                return profileOrder;
-            }
-
-            switch (name.Trim().ToLowerInvariant())
-            {
-                case "default": return DefaultOrder;
-                case "quiverfix": return QuiverFixOrder;
-                case "parrotfix": return ParrotFixOrder;
-            }
-
-            return null;
+            return ResolveOrder(_doll, name);
         }
 
         /// <summary>
@@ -225,10 +215,24 @@ namespace ClassicUO.Game.Managers
         public static bool TrySelectOrder(Mobile mobile, ItemHold dragged, out Layer[] order)
         {
             Compile();
+            return TrySelect(_doll, mobile, dragged, out order);
+        }
 
+        /// <summary>
+        ///     Evaluates <c>paperdoll.renderOrder</c> for the in-world view. Returns false when the profile
+        ///     defines no render rules, so the caller can use the default world layer order.
+        /// </summary>
+        public static bool TrySelectRenderOrder(Mobile mobile, out Layer[] order)
+        {
+            Compile();
+            return TrySelect(_render, mobile, null, out order);
+        }
+
+        private static bool TrySelect(RuleSet set, Mobile mobile, ItemHold dragged, out Layer[] order)
+        {
             order = null;
 
-            if (mobile == null || _rules == null || _rules.Count == 0)
+            if (mobile == null || set?.Rules is not { Count: > 0 })
             {
                 return false;
             }
@@ -237,14 +241,14 @@ namespace ClassicUO.Game.Managers
             Item robe = mobile.FindItemByLayer(Layer.Robe);
             Item helmet = mobile.FindItemByLayer(Layer.Helmet);
 
-            foreach (Rule rule in _rules)
+            foreach (Rule rule in set.Rules)
             {
                 if (!rule.Matches(cloak, robe, helmet, dragged))
                 {
                     continue;
                 }
 
-                Layer[] selected = GetOrder(rule.Order);
+                Layer[] selected = ResolveOrder(set, rule.Order);
 
                 if (selected != null)
                 {
@@ -255,14 +259,39 @@ namespace ClassicUO.Game.Managers
                 Log.Warn($"Server profile paperdoll rule references unknown layer order '{rule.Order}'.");
             }
 
-            order = GetOrder("default");
+            order = ResolveOrder(set, "default");
 
-            if (order == null)
+            if (order == null && ReferenceEquals(set, _doll))
             {
                 Log.Warn("Server profile paperdoll defines layerOrderRules but no usable 'default' order; using the built-in cascade.");
             }
 
             return order != null;
+        }
+
+        private static Layer[] ResolveOrder(RuleSet set, string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            if (set.Orders != null && set.Orders.TryGetValue(name, out Layer[] profileOrder))
+            {
+                return profileOrder;
+            }
+
+            if (ReferenceEquals(set, _doll))
+            {
+                switch (name.Trim().ToLowerInvariant())
+                {
+                    case "default": return DefaultOrder;
+                    case "quiverfix": return QuiverFixOrder;
+                    case "parrotfix": return ParrotFixOrder;
+                }
+            }
+
+            return null;
         }
 
         private static void Compile()
@@ -274,12 +303,14 @@ namespace ClassicUO.Game.Managers
 
             _compiled = true;
 
-            // Built-in covered rules. A profile can replace any list by providing it (an empty array means "none").
-            _robeGraphics = new HashSet<ushort> { 0x0504 };
-            _robeExceptions = new HashSet<ushort> { 0x9985, 0x9986, 0xA412, 0xA2CA, 0xA2CB };
-            _pantsGraphics = new HashSet<ushort> { 0x1411 };
-            _tunicGraphics = new HashSet<ushort> { 0x0238 };
-            _torsoGraphics = new HashSet<ushort> { 0x782A, 0x782B };
+            // Built-in covered rules. A profile can replace any list by providing it
+            // (an empty array means "none", "*" means "any graphic").
+            _robeGraphics = MakeSet(0x0504);
+            _robeExceptions = MakeSet(0x9985, 0x9986, 0xA412, 0xA2CA, 0xA2CB);
+            _pantsGraphics = MakeSet(0x1411);
+            _tunicGraphics = MakeSet(0x0238);
+            _torsoGraphics = MakeSet(0x782A, 0x782B);
+            _helmetBypass = new GraphicSet();
 
             ServerPaperdollInfo paperdoll = ServerProfile.Current?.Paperdoll;
 
@@ -288,37 +319,17 @@ namespace ClassicUO.Game.Managers
                 return;
             }
 
-            if (paperdoll.LayerOrders != null && paperdoll.LayerOrders.Count > 0)
+            _doll = new RuleSet
             {
-                _orders = new Dictionary<string, Layer[]>(StringComparer.OrdinalIgnoreCase);
+                Orders = CompileOrders(paperdoll.LayerOrders, "layerOrders"),
+                Rules = CompileRules(paperdoll.LayerOrderRules, "layerOrderRules")
+            };
 
-                foreach (KeyValuePair<string, List<string>> entry in paperdoll.LayerOrders)
-                {
-                    if (TryParseOrder(entry.Value, out Layer[] layers))
-                    {
-                        _orders[entry.Key] = layers;
-                    }
-                    else
-                    {
-                        Log.Warn($"Server profile paperdoll layerOrders['{entry.Key}'] contains unknown layers and was ignored.");
-                    }
-                }
-            }
-
-            if (paperdoll.LayerOrderRules != null && paperdoll.LayerOrderRules.Count > 0)
+            _render = new RuleSet
             {
-                _rules = new List<Rule>();
-
-                foreach (ServerLayerOrderRule rule in paperdoll.LayerOrderRules)
-                {
-                    Rule compiled = Rule.Compile(rule);
-
-                    if (compiled != null)
-                    {
-                        _rules.Add(compiled);
-                    }
-                }
-            }
+                Orders = CompileOrders(paperdoll.RenderOrder?.LayerOrders, "renderOrder.layerOrders"),
+                Rules = CompileRules(paperdoll.RenderOrder?.LayerOrderRules, "renderOrder.layerOrderRules")
+            };
 
             if (paperdoll.RobeOverlay != null)
             {
@@ -359,7 +370,54 @@ namespace ClassicUO.Game.Managers
                 _pantsGraphics = ParseGraphicSet(paperdoll.Covered.PantsGraphics, _pantsGraphics, "covered.pantsGraphics");
                 _tunicGraphics = ParseGraphicSet(paperdoll.Covered.TunicGraphics, _tunicGraphics, "covered.tunicGraphics");
                 _torsoGraphics = ParseGraphicSet(paperdoll.Covered.TorsoGraphics, _torsoGraphics, "covered.torsoGraphics");
+                _helmetBypass = ParseGraphicSet(paperdoll.Covered.HelmetBypassGraphics, _helmetBypass, "covered.helmetBypassGraphics");
             }
+        }
+
+        private static Dictionary<string, Layer[]> CompileOrders(Dictionary<string, List<string>> orders, string section)
+        {
+            if (orders == null || orders.Count == 0)
+            {
+                return null;
+            }
+
+            var compiled = new Dictionary<string, Layer[]>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (KeyValuePair<string, List<string>> entry in orders)
+            {
+                if (TryParseOrder(entry.Value, out Layer[] layers))
+                {
+                    compiled[entry.Key] = layers;
+                }
+                else
+                {
+                    Log.Warn($"Server profile paperdoll {section}['{entry.Key}'] contains unknown layers and was ignored.");
+                }
+            }
+
+            return compiled.Count > 0 ? compiled : null;
+        }
+
+        private static List<Rule> CompileRules(List<ServerLayerOrderRule> rules, string section)
+        {
+            if (rules == null || rules.Count == 0)
+            {
+                return null;
+            }
+
+            var compiled = new List<Rule>();
+
+            foreach (ServerLayerOrderRule rule in rules)
+            {
+                Rule parsed = Rule.Compile(rule, section);
+
+                if (parsed != null)
+                {
+                    compiled.Add(parsed);
+                }
+            }
+
+            return compiled.Count > 0 ? compiled : null;
         }
 
         private static bool TryParseOrder(List<string> values, out Layer[] layers)
@@ -375,7 +433,7 @@ namespace ClassicUO.Game.Managers
 
             foreach (string value in values)
             {
-                if (!Enum.TryParse(value, true, out Layer layer))
+                if (!TryParseLayer(value, out Layer layer))
                 {
                     return false;
                 }
@@ -387,14 +445,32 @@ namespace ClassicUO.Game.Managers
             return true;
         }
 
-        private static HashSet<ushort> ParseGraphicSet(List<string> values, HashSet<ushort> fallback, string section)
+        /// <summary>Layer names come from packs shared with clients that spell the neck layer differently, so both are accepted.</summary>
+        private static bool TryParseLayer(string value, out Layer layer)
+        {
+            if (Enum.TryParse(value, true, out layer))
+            {
+                return true;
+            }
+
+            if (string.Equals(value?.Trim(), "Necklace", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value?.Trim(), "Neck", StringComparison.OrdinalIgnoreCase))
+            {
+                layer = Layer.Neck;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static GraphicSet ParseGraphicSet(List<string> values, GraphicSet fallback, string section)
         {
             if (values == null)
             {
                 return fallback;
             }
 
-            var set = new HashSet<ushort>();
+            var set = new GraphicSet();
 
             foreach (string value in values)
             {
@@ -403,7 +479,13 @@ namespace ClassicUO.Game.Managers
                     continue;
                 }
 
-                if (TryParseGraphics(value, set))
+                if (value.Trim() == "*")
+                {
+                    set.Any = true;
+                    continue;
+                }
+
+                if (TryParseGraphics(value, set.Values))
                 {
                     continue;
                 }
@@ -445,22 +527,51 @@ namespace ClassicUO.Game.Managers
             return true;
         }
 
+        private static GraphicSet MakeSet(params ushort[] values)
+        {
+            var set = new GraphicSet();
+
+            foreach (ushort value in values)
+            {
+                set.Values.Add(value);
+            }
+
+            return set;
+        }
+
+        private sealed class RuleSet
+        {
+            public Dictionary<string, Layer[]> Orders;
+            public List<Rule> Rules;
+        }
+
+        /// <summary>A set of graphics with an optional "any graphic" wildcard.</summary>
+        private sealed class GraphicSet
+        {
+            public readonly HashSet<ushort> Values = new HashSet<ushort>();
+            public bool Any;
+
+            public bool Contains(ushort graphic) => Any || Values.Contains(graphic);
+        }
+
         private sealed class Rule
         {
             public string Order;
             public bool? CloakEquipped;
             public ushort? CloakGraphic;
+            public GraphicSet CloakGraphics;
             public bool? CloakIsContainer;
-            public HashSet<ushort> RobeGraphics;
+            public GraphicSet RobeGraphics;
             public bool? DraggedIsContainer;
-            public HashSet<ushort> DraggedGraphics;
-            public HashSet<ushort> HelmetGraphics;
+            public Layer? DraggedLayer;
+            public GraphicSet DraggedGraphics;
+            public GraphicSet HelmetGraphics;
 
-            public static Rule Compile(ServerLayerOrderRule source)
+            public static Rule Compile(ServerLayerOrderRule source, string section)
             {
                 if (string.IsNullOrWhiteSpace(source.Order))
                 {
-                    Log.Warn("Server profile paperdoll layerOrderRules entry has no 'order' and was ignored.");
+                    Log.Warn($"Server profile paperdoll {section} entry has no 'order' and was ignored.");
                     return null;
                 }
 
@@ -474,7 +585,7 @@ namespace ClassicUO.Game.Managers
                     }
                     else
                     {
-                        Log.Warn($"Server profile paperdoll layerOrderRules '{source.Order}' cloakGraphic is not a graphic id.");
+                        Log.Warn($"Server profile paperdoll {section} '{source.Order}' cloakGraphic is not a graphic id.");
                         return null;
                     }
                 }
@@ -482,9 +593,24 @@ namespace ClassicUO.Game.Managers
                 rule.CloakEquipped = source.CloakEquipped;
                 rule.CloakIsContainer = source.EquippedCloakIsContainer;
                 rule.DraggedIsContainer = source.DraggedIsContainer;
-                rule.RobeGraphics = ParseGraphicSet(source.RobeGraphics, null, $"layerOrderRules '{source.Order}' robeGraphics");
-                rule.DraggedGraphics = ParseGraphicSet(source.DraggedGraphics, null, $"layerOrderRules '{source.Order}' draggedGraphics");
-                rule.HelmetGraphics = ParseGraphicSet(source.HelmetGraphics, null, $"layerOrderRules '{source.Order}' helmetGraphics");
+
+                if (!string.IsNullOrWhiteSpace(source.DraggedLayer))
+                {
+                    if (Enum.TryParse(source.DraggedLayer, true, out Layer draggedLayer))
+                    {
+                        rule.DraggedLayer = draggedLayer;
+                    }
+                    else
+                    {
+                        Log.Warn($"Server profile paperdoll {section} '{source.Order}' draggedLayer is not a valid layer.");
+                        return null;
+                    }
+                }
+
+                rule.CloakGraphics = ParseGraphicSet(source.CloakGraphics, null, $"{section} '{source.Order}' cloakGraphics");
+                rule.RobeGraphics = ParseGraphicSet(source.RobeGraphics, null, $"{section} '{source.Order}' robeGraphics");
+                rule.DraggedGraphics = ParseGraphicSet(source.DraggedGraphics, null, $"{section} '{source.Order}' draggedGraphics");
+                rule.HelmetGraphics = ParseGraphicSet(source.HelmetGraphics, null, $"{section} '{source.Order}' helmetGraphics");
 
                 return rule;
             }
@@ -497,6 +623,11 @@ namespace ClassicUO.Game.Managers
                 }
 
                 if (CloakGraphic.HasValue && (cloak == null || cloak.Graphic != CloakGraphic.Value))
+                {
+                    return false;
+                }
+
+                if (CloakGraphics != null && (cloak == null || !CloakGraphics.Contains(cloak.Graphic)))
                 {
                     return false;
                 }
@@ -522,6 +653,11 @@ namespace ClassicUO.Game.Managers
                 }
 
                 if (DraggedIsContainer.HasValue && (dragged == null || dragged.ItemData.IsContainer != DraggedIsContainer.Value))
+                {
+                    return false;
+                }
+
+                if (DraggedLayer.HasValue && (dragged == null || dragged.Layer != DraggedLayer.Value))
                 {
                     return false;
                 }
