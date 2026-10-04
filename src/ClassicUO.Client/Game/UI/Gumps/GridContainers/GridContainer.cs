@@ -6,6 +6,7 @@ using ClassicUO.Game.Managers.Hotkeys;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Game.UI.MyraWindows;
 using ClassicUO.Input;
+using ClassicUO.Network.PacketHandlers;
 using ClassicUO.Renderer;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -1037,36 +1038,7 @@ public partial class GridContainer : ResizableGump
             if (Client.Game.UO.Version >= Utility.ClientVersion.CV_706000 &&
                 ProfileManager.CurrentProfile?.UseLargeContainerGumps == true)
             {
-                switch (graphic)
-                {
-                    case 0x0048 when Client.Game.UO.Gumps.GetGump(0x06E8).Texture != null:
-                        graphic = 0x06E8;
-                        break;
-                    case 0x0049 when Client.Game.UO.Gumps.GetGump(0x9CDF).Texture != null:
-                        graphic = 0x9CDF;
-                        break;
-                    case 0x0051 when Client.Game.UO.Gumps.GetGump(0x06E7).Texture != null:
-                        graphic = 0x06E7;
-                        break;
-                    case 0x003E when Client.Game.UO.Gumps.GetGump(0x06E9).Texture != null:
-                        graphic = 0x06E9;
-                        break;
-                    case 0x004D when Client.Game.UO.Gumps.GetGump(0x06EA).Texture != null:
-                        graphic = 0x06EA;
-                        break;
-                    case 0x004E when Client.Game.UO.Gumps.GetGump(0x06E6).Texture != null:
-                        graphic = 0x06E6;
-                        break;
-                    case 0x004F when Client.Game.UO.Gumps.GetGump(0x06E5).Texture != null:
-                        graphic = 0x06E5;
-                        break;
-                    case 0x004A when Client.Game.UO.Gumps.GetGump(0x9CDD).Texture != null:
-                        graphic = 0x9CDD;
-                        break;
-                    case 0x0044 when Client.Game.UO.Gumps.GetGump(0x9CE3).Texture != null:
-                        graphic = 0x9CE3;
-                        break;
-                }
+                OpenContainer.UpdateLargeContainerGraphics(ref graphic);
             }
 
             World.ContainerManager.CalculateContainerPosition(serial, graphic);

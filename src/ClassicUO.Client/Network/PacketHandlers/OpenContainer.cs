@@ -444,7 +444,7 @@ internal static class OpenContainer
         }
     }
 
-    private static void UpdateLargeContainerGraphics(ref ushort graphic)
+    internal static void UpdateLargeContainerGraphics(ref ushort graphic)
     {
         Gump gumps = Client.Game.UO.Gumps;
 
