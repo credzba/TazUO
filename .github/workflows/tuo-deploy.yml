@@ -100,6 +100,17 @@ jobs:
             LOG=$(git log --oneline "${LAST_SHA}..HEAD" --format='• %h %s' 2>/dev/null || echo "(no new commits)")
           fi
 
+          # Discord caps message content at 2000 characters; keep the commit list well under it.
+          LOG=$(NOTES="$LOG" python3 - <<'PYEOF'
+          import os
+          log = os.environ["NOTES"]
+          limit = 1600
+          if len(log) > limit:
+              log = log[:limit].rsplit("\n", 1)[0] + "\n• ...truncated"
+          print(log)
+          PYEOF
+          )
+
           echo "LOG<<EOF" >> $GITHUB_OUTPUT
           echo "$LOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
