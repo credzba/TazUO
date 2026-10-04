@@ -3,6 +3,27 @@ All notable changes to TazUO will be recorded here.
 
 ---
 
+## 10/03/26
+* ***Fix:*** Fixed trees and other statics popping in at the screen edges while walking - viewport culling now accounts for the full art size (art is centered horizontally and grows upward from its base tile) instead of culling on the base tile alone, and map chunks are preloaded just beyond the viewport so statics are resident before they scroll into view
+* ***Feature:*** Changing a containers (local) custom name will now also show in it's tooltip
+* ***Misc:*** Adjusted tooltip rendering behavior when near the edge of the screen - [P.R 1118](https://github.com/PlayTazUO/TazUO/pull/1118) ([yuval-po](https://github.com/yuval-po)) 
+* ***Misc:*** Split the "Auto unequp for actions" setting into separate settings for spells and potions - [P.R 1112](https://github.com/PlayTazUO/TazUO/pull/1112) ([yuval-po](https://github.com/yuval-po))
+* ***Fix:*** Removed duplicated "Turn delay", "Show incoming mobiles" and "Show incoming corpses" settings - [P.R 1112](https://github.com/PlayTazUO/TazUO/pull/1112) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Added per-packet tracking to profiler - [P.R 1112](https://github.com/PlayTazUO/TazUO/pull/1112) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Improved packet logger with additional debug information - [P.R 1112](https://github.com/PlayTazUO/TazUO/pull/1112) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Reduced the work and memory allocated when opening server gumps - compressed gump decompression now reuses pooled buffers, gump text lines skip a redundant NUL scan, and layout parsing no longer allocates a token list per command or rebuilds each command with string joins
+* ***Misc:*** Reworked outgoing network sends to be event-driven instead of polling every millisecond, so a queued packet is written immediately rather than on the next tick. This also removes the send-path lock that could contend with the game thread and the 4 KiB send chunking left over from the old synchronous path
+* ***Misc:*** Reduced rendering spikes when entering new areas: UOP animation data compressed with the BWT codec now decompresses several times faster (the decoder no longer builds and sorts a 65K-entry table, and its large shifts use a bulk move instead of byte-at-a-time), and animation reads reuse a pooled buffer instead of allocating per load
+* ***Fix:*** Fixed a multi-hundred-millisecond freeze when a custom house design loads (packet 0xD8) - each component was re-scanning the full wall/floor/roof/door/stair/teleport tables to classify it, and one tile loop still linearly searched every component. Lookups are now memoized and use the house's spatial index
+
+## 10/2/26
+* ***Feature:*** The system chat message width is now adjustable under Options > Chat > Speech (defaults to the previous 320px), controlling how wide messages get before wrapping
+* ***Feature:*** Added a "Stack health bars" option to the last attack health bars, so automatically opened bars are offset instead of opening on top of each other. It is mutually exclusive with "Update one bar as last attack", and gains an "Anchor health bars" sub-option to keep the stacked bars anchored together
+* ***Misc:*** Moved the last attack health bar options into their own section under Options > Health Bars
+* ***Fix:*** Fixed the nameplate mini-settings gump ignoring right-click to close after logging back in with "Stay active" enabled - the closeable state was only synced while toggling the checkbox during the session, so it is now seeded from the saved "Stay active" setting when the gump opens
+* ***Fix:*** Fixed a client crash when an item tooltip override or tooltip header format contained a malformed format string (for example an unescaped `{`) - the invalid format is now reported and the plain item name shown instead
+* ***Fix:*** Fixed a client crash on mouse click when the clicked control was cleared while its mouse-down handler ran (`NullReferenceException` in `UIManager.OnMouseButtonDown`) - the control is now captured before dispatch so the focus update no longer dereferences a missing control
+
 ## 9/28/26
 * ***Feature:*** Added a "Toggle Scavenging" macro, and both it and "Toggle Auto Loot" now report when they enable or disable
 * ***Feature:*** Added "Set Rows" and "Set Columns" options to the Action Bar cell context menu's Size submenu, so you can type an exact row or column count
