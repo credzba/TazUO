@@ -14,7 +14,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 :::
 
 
-*This was generated on `10/3/26`.*
+*This was generated on `10/4/26`.*
 
 ## Properties
 ### `Events`
@@ -3906,8 +3906,8 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 ---
 
 ### MarkTile
-`(x, y, hue, map)`
- Mark a tile with a specific hue.
+`(x, y, hue, map, label)`
+ Mark a tile with a specific hue and optional text label.
 
 
 **Parameters:**
@@ -3918,6 +3918,7 @@ All methods, properties, enums, etc need to pre prefaced with `API.` for example
 | `y` | `int` | ❌ No |  |
 | `hue` | `ushort` | ❌ No |  |
 | `map` | `int` | ✅ Yes | Defaults to current map |
+| `label` | `string` | ✅ Yes | Optional text label displayed on the tile |
 
 **Return Type:** `void` *(Does not return anything)*
 
