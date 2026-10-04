@@ -1,5 +1,6 @@
 using ClassicUO.Configuration;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -76,7 +77,10 @@ namespace ClassicUO.Game.Managers
     {
         public static TileMarkerManager Instance { get; private set; } = new TileMarkerManager();
 
-        private Dictionary<TileLocation, TileMarkerData> markedTiles = new Dictionary<TileLocation, TileMarkerData>();
+        // Read from async chunk loading threads (Chunk.Load) while the main thread adds/removes
+        // markers, and enumerated during draw; a plain Dictionary both races and invalidates its
+        // enumerator when mutated mid-loop.
+        private ConcurrentDictionary<TileLocation, TileMarkerData> markedTiles = new();
         private TileMarkerConfig config;
 
         private TileMarkerManager() { Load(); }
@@ -101,7 +105,7 @@ namespace ClassicUO.Game.Managers
         {
             var location = new TileLocation(x, y, map);
 
-            if (markedTiles.Remove(location))
+            if (markedTiles.TryRemove(location, out _))
             {
                 UpdateLiveTilesAt(x, y, map, 0);
             }
@@ -138,7 +142,9 @@ namespace ClassicUO.Game.Managers
             MigrateLegacyFile();
 
             config = TileMarkerConfig.Load();
-            markedTiles = config.Markers.ToDictionary(e => e.Location, e => new TileMarkerData { Hue = e.Hue, Label = e.Label });
+            markedTiles = new ConcurrentDictionary<TileLocation, TileMarkerData>(
+                config.Markers.ToDictionary(e => e.Location, e => new TileMarkerData { Hue = e.Hue, Label = e.Label })
+            );
         }
 
         /// <summary>Moves the old profile-scoped TileMarkers.json into the server-scoped location, once.</summary>
