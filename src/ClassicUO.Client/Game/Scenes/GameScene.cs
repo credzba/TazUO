@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 
 // Copyright (c) 2021, andreakarasho
 // All rights reserved.
@@ -1501,7 +1501,7 @@ namespace ClassicUO.Game.Scenes
 
                 currentLocations.Add(loc);
 
-                sbyte tileZ = _world.Map.GetTileZ(loc.X, loc.Y);
+                sbyte tileZ = World.Map.GetTileZ(loc.X, loc.Y);
 
                 if (tileZ <= -125)
                     tileZ = 0;
