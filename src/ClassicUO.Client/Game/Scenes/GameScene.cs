@@ -1501,8 +1501,13 @@ namespace ClassicUO.Game.Scenes
 
                 currentLocations.Add(loc);
 
+                sbyte tileZ = _world.Map.GetTileZ(loc.X, loc.Y);
+
+                if (tileZ <= -125)
+                    tileZ = 0;
+
                 int screenX = ((loc.X - loc.Y) * 22) - offsetX - 22;
-                int screenY = ((loc.X + loc.Y) * 22) - offsetY - 22;
+                int screenY = ((loc.X + loc.Y) * 22 - (tileZ << 2)) - offsetY - 22;
 
                 if (_markedTileLabels.TryGetValue(loc, out TextObject textObj))
                 {
