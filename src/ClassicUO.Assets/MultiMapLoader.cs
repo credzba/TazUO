@@ -14,6 +14,13 @@ namespace ClassicUO.Assets
 {
     public sealed class MultiMapLoader : UOFileLoader
     {
+        /// <summary>
+        /// Upper bound on the pixel buffer one DisplayMap request may materialize (~256 MB at 4 bytes
+        /// per pixel). Anything larger is rejected rather than risking an OutOfMemoryException; requests
+        /// above the renderer's texture limit but below this are downscaled by the renderer.
+        /// </summary>
+        private const long MAX_MAP_PIXELS = 64L * 1024 * 1024;
+
         private UOFileMul[] _facets;
         private UOFile _file;
 
@@ -70,9 +77,9 @@ namespace ClassicUO.Assets
                 return default;
             }
 
-            if (width <= 0 || height <= 0 || (long)width * height > int.MaxValue)
+            if (width <= 0 || height <= 0 || (long)width * height > MAX_MAP_PIXELS)
             {
-                Log.Warn("Invalid bounds requested from MultiMap.rle");
+                Log.Warn($"Invalid bounds requested from MultiMap.rle: {width}x{height}");
 
                 return default;
             }
@@ -232,8 +239,10 @@ namespace ClassicUO.Assets
             int pwidth = endX - startX;
             int pheight = endY - startY;
 
-            if (pwidth <= 0 || pheight <= 0 || (long)pwidth * pheight > int.MaxValue)
+            if (pwidth <= 0 || pheight <= 0 || (long)pwidth * pheight > MAX_MAP_PIXELS)
             {
+                Log.Warn($"Invalid facet map bounds: facet {facet}, {pwidth}x{pheight}");
+
                 return default;
             }
 

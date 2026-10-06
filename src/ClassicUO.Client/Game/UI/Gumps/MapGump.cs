@@ -464,6 +464,10 @@ namespace ClassicUO.Game.UI.Gumps
         public override void AfterDispose()
         {
             base.AfterDispose();
+
+            _mapTexture?.Dispose();
+            _mapTexture = null;
+
             if (_hit != null)
             {
                 _hit.MouseUp -= TextureControlOnMouseUp;
