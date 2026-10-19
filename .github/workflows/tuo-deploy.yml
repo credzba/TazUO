@@ -4,14 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to build (default: legacy)'
+        description: 'Branch to build (default: credzba_legacy)'
         required: true
-        default: 'legacy'
+        default: 'credzba_legacy'
 
 env:
   CUO_OUTPUT_PATH: 'bin/dist'
   CUO_PROJECT_PATH: "src/ClassicUO.Client/ClassicUO.Client.csproj"
   # Bootstrap project not present in this repo
+  R2_BUCKET: tazuo-releases
+  R2_PREFIX: legacy
 
   DOTNET_NOLOGO: false
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -65,12 +67,25 @@ jobs:
           zip -r ../${{ matrix.rid }}.zip .
         fi
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: tuo-legacy-net9-${{ matrix.rid }}
-        path: bin/${{ matrix.rid }}.zip
-        retention-days: 30
+    - name: Upload to R2
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: auto
+        R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      run: |
+        set -euo pipefail
+        if ! command -v aws >/dev/null 2>&1; then
+          python3 -m pip install --quiet awscli 2>/dev/null || pip install --quiet awscli
+        fi
+        aws s3 cp "bin/${{ matrix.rid }}.zip" \
+          "s3://${R2_BUCKET}/${R2_PREFIX}/${{ matrix.rid }}.zip" \
+          --endpoint-url "${R2_ENDPOINT}" \
+          --region auto \
+          --content-type application/zip \
+          --cache-control "max-age=60"
+        echo "Uploaded s3://${R2_BUCKET}/${R2_PREFIX}/${{ matrix.rid }}.zip"
 
   notify:
     needs: [build]
@@ -122,7 +137,8 @@ jobs:
           content: |
             **TazUO Legacy build complete**
             🕐 ${{ steps.notes.outputs.DATE }}
-            📦 [Download artifacts](<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}>)
+            📦 Windows: ${{ secrets.R2_PUBLIC_BASE }}/legacy/win-x64.zip
+            📦 Linux:   ${{ secrets.R2_PUBLIC_BASE }}/legacy/linux-x64.zip
 
             **Commits since last build:**
             ${{ steps.notes.outputs.LOG }}
