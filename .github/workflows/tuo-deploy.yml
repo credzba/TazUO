@@ -134,12 +134,17 @@ jobs:
             python3 -m pip install --quiet awscli 2>/dev/null || pip install --quiet awscli
           fi
           aws s3 cp "${{ matrix.rid }}.zip" \
-            "s3://${R2_BUCKET}/${R2_PREFIX}/${{ matrix.rid }}.zip" \
+            "s3://${R2_BUCKET}/${R2_PREFIX}/tazuo-${R2_PREFIX}-${{ matrix.rid }}.zip" \
             --endpoint-url "${R2_ENDPOINT}" \
             --region auto \
             --content-type application/zip \
             --cache-control "max-age=60"
-          echo "Uploaded s3://${R2_BUCKET}/${R2_PREFIX}/${{ matrix.rid }}.zip"
+          # Remove objects from the old naming scheme (keeps one build per folder).
+          for old in win-x64.zip linux-x64.zip; do
+            aws s3 rm "s3://${R2_BUCKET}/${R2_PREFIX}/${old}" \
+              --endpoint-url "${R2_ENDPOINT}" --region auto || true
+          done
+          echo "Uploaded s3://${R2_BUCKET}/${R2_PREFIX}/tazuo-${R2_PREFIX}-${{ matrix.rid }}.zip"
 
   notify:
     needs: [build]
@@ -191,8 +196,8 @@ jobs:
           content: |
             **TazUO build complete**
             🕐 ${{ steps.notes.outputs.DATE }}
-            📦 Windows: ${{ secrets.R2_PUBLIC_BASE }}/dev/win-x64.zip
-            📦 Linux:   ${{ secrets.R2_PUBLIC_BASE }}/dev/linux-x64.zip
+            📦 Windows: ${{ secrets.R2_PUBLIC_BASE }}/dev/tazuo-dev-win-x64.zip
+            📦 Linux:   ${{ secrets.R2_PUBLIC_BASE }}/dev/tazuo-dev-linux-x64.zip
 
             **Commits since last build:**
             ${{ steps.notes.outputs.LOG }}
