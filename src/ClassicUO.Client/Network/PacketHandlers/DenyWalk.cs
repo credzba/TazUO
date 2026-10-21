@@ -21,6 +21,12 @@ internal static class DenyWalk
         world.Player.Walker.DenyWalk(seq, x, y, z);
         world.Player.Direction = direction;
 
+        // The denied step may have been blocked by an open door panel. Close it so a
+        // retry can proceed (guarded by the auto-close setting inside the helper).
+        int doorX = x, doorY = y;
+        Pathfinder.GetNewXY((byte)direction, ref doorX, ref doorY);
+        world.Player.TryCloseDoorOnDeniedStep(doorX, doorY, z);
+
         world.Weather.Reset();
     }
 }

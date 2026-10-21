@@ -420,6 +420,10 @@ namespace ClassicUO.Game.GameObjects
             TryOpenDoors();
         }
 
+        private uint _lastAutoClosedDoorSerial;
+        private long _lastAutoClosedDoorTicks;
+        private const int DoorCloseRetryMs = 700;
+
         private void TryOpenDoors()
         {
             if (!World.Player.IsDead && ProfileManager.CurrentProfile.AutoOpenDoors
@@ -512,6 +516,56 @@ namespace ClassicUO.Game.GameObjects
             }
 
             return TileHasDoor(x, y, z);
+        }
+
+        /// <summary>
+        /// Closes an open door on the tile the server just refused, when auto-close is
+        /// enabled. The facing-tile logic only runs on a direction change and the flanking
+        /// logic only covers diagonal steps, so a straight step into an open panel would
+        /// otherwise leave the walker retrying against the door.
+        /// </summary>
+        /// <param name="x">X of the rejected destination tile.</param>
+        /// <param name="y">Y of the rejected destination tile.</param>
+        /// <param name="z">Player Z at the time of the rejection.</param>
+        internal void TryCloseDoorOnDeniedStep(int x, int y, sbyte z)
+        {
+            if (IsDead || !ProfileManager.GlobalSettings.AutoCloseDoors)
+                return;
+
+            Profile profile = ProfileManager.CurrentProfile;
+
+            if (!profile.AutoOpenDoors || (!profile.AutoOpenDoorsIfHidden && IsHidden))
+                return;
+
+            GameObject obj = World.Map.GetTile(x, y, false);
+
+            while (obj?.TPrevious != null)
+            {
+                obj = obj.TPrevious;
+            }
+
+            for (; obj != null; obj = obj.TNext)
+            {
+                if (obj is Item door && door.ItemData.IsDoor && door.Z - 15 <= z && door.Z + 15 >= z
+                    && DoorData.IsOpenDoor(door.Graphic))
+                {
+                    long now = Environment.TickCount;
+
+                    // A burst of denied steps can hit the same door; toggling it more
+                    // than once would reopen it. The first double-click can also be
+                    // dropped while the server resyncs, so allow one retry after the
+                    // window instead of suppressing the door for the whole attempt.
+                    if (door.Serial == _lastAutoClosedDoorSerial && now - _lastAutoClosedDoorTicks < DoorCloseRetryMs)
+                        return;
+
+                    _lastAutoClosedDoorSerial = door.Serial;
+                    _lastAutoClosedDoorTicks = now;
+
+                    AsyncNetClient.Socket.Send_DoubleClick(door.Serial);
+
+                    return;
+                }
+            }
         }
 
         // Walk the tile's linked list instead of scanning every item in the world.
