@@ -3,6 +3,104 @@ All notable changes to TazUO will be recorded here.
 
 ---
 
+## 10/30/26
+* ***Fix:*** The client no longer disappears without a crash report (SIGSEGV on the audio thread) after a few hours of play on Linux - the bundled FAudio mixer had a resampling bug that wrote past its output buffer when the 10ms audio updates were resampled, corrupting the heap until the audio thread faulted; FNA and FAudio are updated to 26.10, which fixes the resample tap overrun
+* ***Fix:*** Duplicate world map marker icons no longer leak GPU memory each time the map is opened - icons with the same name in multiple `MapIcons` folders are now de-duplicated, with the server-specific icon taking precedence and the replaced texture disposed
+
+## 10/27/26
+* ***Fix:*** Modern windows no longer resize when dragging over whilst holding an item - [P.R 1193](https://github.com/PlayTazUO/TazUO/pull/1193) ([yuval-po](https://github.com/yuval-po))
+* ***Legion:*** `API.Profile.GetSavedMountSerial()` returns the serial saved by `API.SetMount` and the `Set mount` macro, or 0 if none is set - [P.R 1193](https://github.com/PlayTazUO/TazUO/pull/1193) ([yuval-po](https://github.com/yuval-po))
+
+## 10/26/26
+* ***Fix:*** Fixed the nameplate options gump not reopening after it was closed with right-click while `Stay active` was on - holding the nameplate hotkey now brings it back
+
+## 10/25/26
+* ***Fix:*** A denied step (e.g. walking into a mobile) no longer clears the weather - the server doesn't resend it, so rain or snow vanished until the weather changed
+* ***Feature:*** Lightning lights up the night with a double flash, without changing the server or custom light level - can be turned off in Video > Lighting (`Lightning flash`)
+* ***Legion:*** `API.RequestTarget` and `API.RequestAnyTarget` can now target a world map location - the selected coordinates are available through `API.LastTargetPos` (the returned serial is 0 for a location)
+* ***Feature:*** Added VFX/Shake support to LegionAPI - [P.R 1179](https://github.com/PlayTazUO/TazUO/pull/1179) ([yuval-po](https://github.com/yuval-po))
+* ***Fix:*** Crash on shutdown due to setting NRE - [P.R 1179](https://github.com/PlayTazUO/TazUO/pull/1179) ([yuval-po](https://github.com/yuval-po))
+* ***Feature:*** The Mount, Toggle mount and Set mount macros now accept mount items as well as creatures, supporting servers that mount by double-clicking a mount item in your inventory
+* ***Feature:*** Grid container searches support regular expressions when the query begins with `$` (the `$` is not part of the pattern), matched case-insensitively against item names and tooltips
+* ***Feature:*** Spell indicators can start tracking a cast as soon as the client sends the cast packet, instead of waiting for the server's power words - new off-by-default `Begin spell indicator on cast` option in the Spells options and the Assistant spell indicators tab
+* ***Feature:*** Graphic replacement filters have a per-entry `Enabled` checkbox in the Assistant filters tab - entries can be turned off without deleting them, and existing filters stay enabled after updating
+* ***Fix:*** Logging out no longer crashes with a `NullReferenceException` when the player or profile is already gone (e.g. confirming the quit dialog while the world is shutting down) - the last-equipment snapshot is skipped in that case
+* ***Legion:*** `API.Pathfind`, `API.PathfindEntity` and `API.GetPath` now use the world-map pathfinder when the destination is more than 10 tiles away, so scripts can route long distances like world-map click-to-walk instead of failing
+* ***Fix:*** Clicking the resizable journal no longer steals keyboard focus from the game - arrow-key/WASD movement and Enter to open chat keep working, and a text selection no longer blocks the next key press
+* ***Fix:*** Script macro buttons created from the script manager target the script's folder path, so same-named scripts in different folders no longer run the wrong one
+* ***Fix:*** Effects no longer crash the client when their graphic is outside the static tile table (e.g. lightning's `0x4E20`) - the tiledata lookup now falls back to an empty entry instead of throwing `IndexOutOfRangeException`
+* ***Fix:*** Drawing an effect whose graphic is outside the static tile table (e.g. lightning) no longer crashes while the world render list is built - the draw-time tiledata lookups use the same safe fallback as effect creation, and so do multis, dropped items and light sources
+
+## 10/20/26
+* ***Feature:*** Grid containers draw a second art for item stacks, like the classic container gump
+* ***Fix:*** Flying monsters whose body has no fly animation keep using their walk and stand animations
+* ***Fix:*** Lights near the camera no longer disappear in crowded areas or with a large viewport - lights per frame were capped at 100 (the number of light graphics), and the off-screen light margin filled the cap before the closest lights were collected
+* ***Feature:*** Grid containers: closing a container carried by another mobile (a player vendor, a pack animal) also closes its inner containers, like the bank
+* ***Feature:*** Xml Gump health bars show a paralyzed state - new `hue_paralyzed` and `image_foreground_paralyzed` attributes (default hue 49)
+* ***Fix:*** Animals without a second attack animation now play their first attack when the server requests the second one, instead of showing nothing
+* ***Fix:*** Always run unless hidden no longer forces ghosts to walk on servers that flag them as hidden
+* ***Fix:*** Elf and gargoyle ghosts keep their gender and race, and gargoyle ghosts no longer use the opposite gender's body animation
+* ***Fix:*** Fixed the tiledata static count being overestimated - the 20-character tile names were measured as a pointer, so the static table was oversized and graphics past the end of `tiledata.mul` passed validity checks as empty tiles
+* ***Fix:*** The trade window no longer caps the gold and platinum offers separately at each balance - the server converts between the two (1 platinum = 1,000,000,000 gold), so each field is now limited by your total wealth minus what the other field already offers
+* ***Fix:*** Statics high on the map are no longer hidden or cut off - statics at the maximum height (Z 127) stay visible when there is nothing above the player, and tall statics whose top goes past Z 150 are drawn
+* ***Fix:*** Weapons held by a sitting character are no longer squashed by the sitting animation - only the body is folded
+* ***Fix:*** The season packet no longer starts music track 0 or 1 when the season changes and nothing is playing - its second byte is a play-sound flag, not a music index
+* ***Fix:*** Music volume changes (including unchecking `Enable Music`) now apply to the track already playing when `Reproduce sounds in background` is enabled
+* ***Fix:*** Mobiles and corpses whose body has no second death animation (common on custom creatures and mounts) no longer turn invisible when they die running - they fall back to the first death animation
+* ***Fix:*** Non-movable server gumps (e.g. a region name shown over the viewport) always open where the server places them - a position remembered from earlier in the session, saved in the profile at logout, or pinned by "save all gump positions automatically" no longer overrides it, and that option no longer pins non-movable gumps
+
+## 10/16/26
+* ***Feature:*** Added an in-game visual editor for Xml Gumps - open it with the `xmleditor` command or the top bar's Xml Gumps menu. It lists every element, lets you add, duplicate, delete and reorder them, and edits each attribute in a property panel (with hue and graphic pickers).
+* ***Fix:*** Moving with the keyboard (arrow keys, WASD, or a walk macro) now cancels auto follow, matching mouse movement instead of leaving follow active
+* ***Fix:*** The resizable journal now only auto-scrolls to the newest entry when it is already scrolled to the bottom - if it is scrolled partially or all the way up, incoming messages no longer shift the view, so reading or selecting text is not disturbed
+
+## 10/13/26
+* ***Fix:*** Fixed a client crash when a vendor's sell list contained the same item serial twice (`ArgumentException: Argument_AddingDuplicateWithKey`) - a duplicate entry now replaces the previous shop item instead of throwing
+* ***Feature:*** Added `API.CreateEffect(...)` to Legion scripting, allowing scripts to create and display local visual effects (spell animations, projectiles, explosions) in the game world
+* ***Legion:*** Added `API.Gumps.CreateGumpSlider(...)` to Legion scripting, creating a horizontal slider control with a readable/settable `Value`, `MinValue`/`MaxValue`, and an `OnValueChanged(callback)` hook
+* ***Legion:*** Fixed `API.MoveItemOffset()` and `API.QueueMoveItemOffset()` mishandling their `z` argument - an explicit `z` is now treated as an offset from the player (previously it was compared against the destination tile's absolute land/static z and could be silently overridden), and leaving `z` blank now drops at the ground/static z of the destination tile
+
+## 10/12/26
+* ***Misc:*** Added infrastructure for per-window help and improved resource cleanup when closing Myra windows - [P.R 1149](https://github.com/PlayTazUO/TazUO/pull/1149) ([yuval-po](https://github.com/yuval-po)) 
+* ***Feature:*** Added support for Enhanced Map protocol, this works for existing servers and will also work for TazUO's fork of a more modern EnhancedMap server
+* ***Feature:*** The equipment durability tracker can now watch any mobile, not just your own character - opening a mobile's paperdoll requests its equipment properties, and a durability tracker icon appears on that paperdoll once durability data is known. Clicking it opens the tracker, titled with the mobile's name
+* ***Misc:*** The pattern used to read durability from an item's tooltip is now the customizable `durability_regex` language key (the default still matches text like `Durability 45 / 255`), so servers using different wording can be supported without a client change
+* ***Fix:*** Fixed shift-clicking an item to add it to auto loot appearing to do nothing - the Auto Loot and Scavenger lists were built once and never refreshed, so the item only showed after the client was restarted. Those tabs now rebuild when revisited
+* ***Fix:*** Shift-clicking an item to add it to auto loot no longer claims success when the auto loot config failed to load; the client now reports that it is not ready instead
+* ***Fix:*** The network status gump's ping no longer freezes at its last value when the connection stops receiving replies - the outstanding probe's age is reported once it exceeds the running average, so the figure climbs to show the stall
+
+## 10/11/26
+* ***Feature:*** The network status gump now shows the last ping alongside the average in expanded view, as `avg (last)`
+* ***Feature:*** The profiler window's columns can now be sorted by clicking their headers, with a second click flipping the direction and an arrow marking the active column
+* ***Fix:*** Fixed a client crash on login/character change (`InvalidOperationException: Collection was modified`) when a gump's disposal added or removed other gumps while the UI was being cleared - `UIManager.Clear()` now disposes from a snapshot of the gump list
+* ***Fix:*** Fixed a client crash (`InvalidOperationException: ConcurrentOperationsNotSupported`) when voice recognition put recognized speech into the chat textbox - the audio-processing thread was writing to the UI directly, so the textbox measured text through FontStashSharp while the main thread was drawing. The text is now inserted on the main thread
+
+## 10/10/26
+* ***Fix:*** Fixed double right-click pathfinding getting stuck walking toward the cursor instead of following the path to the clicked tile - after a double-click started a pathfind, the right-button state was left set, so each frame overrode the pathfinder with a cursor walk until another right-click. This only affected double-click; "Single click for pathfinding" was unaffected
+
+## 10/8/26
+* ***Feature:*** Completely re-written the Macro Button Editor and added additional functionality - [P.R 1131](https://github.com/PlayTazUO/TazUO/pull/1131) ([yuval-po](https://github.com/yuval-po))
+* ***Fix:*** Fixed an issue in which some windows remained partially active after close - [P.R 1131](https://github.com/PlayTazUO/TazUO/pull/1131) ([yuval-po](https://github.com/yuval-po))
+* ***Misc:*** Updated some option texts/tooltips for better clarity - [P.R 1131](https://github.com/PlayTazUO/TazUO/pull/1131) ([yuval-po](https://github.com/yuval-po))
+* ***Feature:*** Added a "Show resurrection waypoints" option to the world map, drawing server-sent healer waypoints as orange dots with their names on hover
+* ***Misc:*** Removed the legacy options window (`ModernOptionsGump`) and its `old-options-window` and `optlink` commands - every settings entry point, including the gamepad Start button, now opens the current options window
+* ***Misc:*** Removed the spell bar system - the Spell Bar gump, its manager, presets, and the Assistant > General > Spell Bar tab. The "Spell bar windows" Hide-HUD entry and the spell bar row macros are gone too (their macro IDs stay reserved so saved macros still load). The shared spell quick-search widget remains for the top bar and the action/counter bar context menu
+* ***Misc:*** Removed 253 stale entries from `language.ini` left behind by removed or renamed features, and added `tools/check_language_keys.py` to report (and `--prune`) unreferenced keys going forward
+* ***Misc:*** Removed the legacy SQL profile settings and their one-time migration shim (`SqlProfile.cs`) now that settings live in JSON again, along with the now-unused SQL settings source generator and its attribute. The photosensitivity-warning acknowledgement is kept as a regular profile setting
+* ***Feature:*** Action bars now have a per-bar "Hide label" option in their cell context menu; hiding the label collapses the header so the cells sit flush with the top
+* ***Feature:*** The network status gump now shows total packets sent and received on their own line, abbreviated with k/m/b suffixes once large
+* ***Fix:*** The in-game ping now falls back to an ICMP ping when a server does not answer the protocol ping packet, and stops trying for the rest of the session (showing "Ping: N/A") if ICMP fails too
+* ***Fix:*** Mobile movement now animates at the server's actual step cadence even when it is slower than the default, so mobs on custom speeds no longer stutter move-then-stall; facing-turns no longer cause the first move after them to dart, and cadences slower than a walk keep the normal step-then-stand look
+* ***Fix:*** Fixed animal bodies without a run animation sliding on their stand frames while moving - they now use the walk animation
+* ***Fix:*** Fixed a client crash when a multi or item referenced a static graphic outside the loaded `tiledata.mul` range (custom or mismatched data files, or server-driven art) - `Static`, `Multi`, `Item` and `ItemHold` now fall back to an empty tile instead of throwing `IndexOutOfRangeException` while handling packets
+* ***Misc:*** The crash log now recognises more failures and offers targeted advice: missing or mismatched animation files (`anim*.mul`/`AnimationFrame*.uop`) and gump art (`gumpart.mul`/`gumpartLegacyMUL.uop`), a read-only install location (`Read-only file system`), startup with no video device, and FontStashSharp text-measurement faults caused by scripts building text off the main thread
+
+## 10/7/26
+* ***Feature:*** Added a "Warmode" filter to the nameplate options, so only mobiles in war mode (`Mobile.InWarMode`) can be shown
+* ***Legion:*** Added `API.RequestHotkey(prompt, timeout)` to pop up the in-game hotkey capture window and return the chosen key combination as a string, ready to pass straight to `API.OnHotKey()` or `API.IsKeyPressed()` (for example `"CTRL+SHIFT+F1"`); only keyboard bindings are accepted, and it returns an empty string if the window is cancelled or the timeout elapses
+* ***Fix:*** Relative UO data directory paths are now resolved against the client install directory instead of the process working directory, so a relative `ultimaonlinedirectory` (or `-uopath`) works the same however the client is launched. The value is still saved as-is, so relative paths stay relative in `settings.json`
+* ***Fix:*** Reduced stutter when entering new areas - static art is now decoded ahead of time on the main thread within a small per-frame budget, instead of all at once the first time each graphic is drawn
+
 ## 10/03/26
 * ***Fix:*** Fixed trees and other statics popping in at the screen edges while walking - viewport culling now accounts for the full art size (art is centered horizontally and grows upward from its base tile) instead of culling on the base tile alone, and map chunks are preloaded just beyond the viewport so statics are resident before they scroll into view
 * ***Feature:*** Changing a containers (local) custom name will now also show in it's tooltip

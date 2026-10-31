@@ -66,13 +66,14 @@ namespace ClassicUO.Game.GameObjects
                         break;
                     }
 
+                // Gargoyle ghosts: 0x02B6 male, 0x02B7 female.
                 case 0x02B6:
-                    g = 667;
+                    g = 666;
 
                     break;
 
                 case 0x02B7:
-                    g = 666;
+                    g = 667;
 
                     break;
             }
@@ -130,7 +131,8 @@ namespace ClassicUO.Game.GameObjects
             }
             else
             {
-                if (mobile.IsFlyingAnimationEnabled)
+                // Bodies without a fly animation keep their ground animations instead of vanishing.
+                if (mobile.IsFlyingAnimationEnabled && animations.AnimationExists(graphic, 19))
                 {
                     result = 19;
                 }
@@ -640,6 +642,12 @@ namespace ClassicUO.Game.GameObjects
                                         break;
                                 }
                             }
+                            else if (isParent && v13 == (ushort)LowAnimationGroup.Attack2 && !animations.AnimationExists(graphic, (byte)v13))
+                            {
+                                // Many animals have a single attack: fall back to it instead of showing nothing.
+                                // Skipped for mounts, whose group comes from the rider's action.
+                                v13 = (ushort)LowAnimationGroup.Attack1;
+                            }
 
                             //if (v13 > 12)
                             //    v13 = 0; // 2
@@ -1080,9 +1088,10 @@ namespace ClassicUO.Game.GameObjects
                             }
                             else
                             {
+                                // No run group: walk rather than slide on the stand frames.
                                 result = animations.AnimationExists(graphic, 1)
-                                    ? (byte)1
-                                    : (byte)2;
+                                    ? (byte)LowAnimationGroup.Run
+                                    : (byte)LowAnimationGroup.Walk;
                             }
                         }
                         else if (

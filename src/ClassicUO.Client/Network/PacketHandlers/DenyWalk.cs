@@ -27,6 +27,6 @@ internal static class DenyWalk
         Pathfinder.GetNewXY((byte)direction, ref doorX, ref doorY);
         world.Player.TryCloseDoorOnDeniedStep(doorX, doorY, z);
 
-        world.Weather.Reset();
+        // The weather is kept: a denied step doesn't change it, and the server won't resend what it already sent.
     }
 }

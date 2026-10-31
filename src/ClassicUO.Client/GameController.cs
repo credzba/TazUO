@@ -271,17 +271,23 @@ namespace ClassicUO
 
         private void OnVoiceTextRecognized(string text)
         {
-            SystemChatControl chat = UIManager.SystemChat;
-            if (chat == null || chat.IsDisposed)
-                return;
-
-            if (!chat.IsActive)
+            // VoiceRecognitionManager raises this on its own audio-processing thread, but the chat
+            // control measures text through FontStashSharp when text is appended - its caches are
+            // not thread-safe, so mutating the UI off the main thread corrupts them and crashes.
+            MainThreadQueue.InvokeOnMainThread(() =>
             {
-                chat.IsActive = true;
-                chat.SetFocus();
-            }
+                SystemChatControl chat = UIManager.SystemChat;
+                if (chat == null || chat.IsDisposed)
+                    return;
 
-            chat.TextBoxControl.AppendText(text);
+                if (!chat.IsActive)
+                {
+                    chat.IsActive = true;
+                    chat.SetFocus();
+                }
+
+                chat.TextBoxControl.AppendText(text);
+            });
         }
 
         private void LoadPlugins()
@@ -1239,14 +1245,9 @@ namespace ClassicUO
                     }
                     else if (sdlEvent->gbutton.button == (byte)SDL.SDL_GamepadButton.SDL_GAMEPAD_BUTTON_START && UO.World.InGame)
                     {
-                        Gump g = UIManager.GetGump<ModernOptionsGump>();
-                        if (g == null)
+                        if (!GameActions.CloseSettings())
                         {
-                            UIManager.Add(new ModernOptionsGump(UIManager.World));
-                        }
-                        else
-                        {
-                            g.Dispose();
+                            GameActions.ShowNewOptionsGump();
                         }
                     }
                     break;

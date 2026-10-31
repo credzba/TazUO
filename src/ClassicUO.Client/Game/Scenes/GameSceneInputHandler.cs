@@ -657,9 +657,9 @@ namespace ClassicUO.Game.Scenes
                         if (gobj is Land land) { }
                         else
                         {
-                            ref StaticTiles itemData = ref Client.Game.UO.FileManager.TileData.StaticData[
+                            ref StaticTiles itemData = ref Client.Game.UO.FileManager.TileData.GetStaticTile(
                                 gobj.Graphic
-                            ];
+                            );
 
                             if (itemData.IsSurface)
                             {
@@ -824,20 +824,17 @@ namespace ClassicUO.Game.Scenes
                         }
                         break;
                     case CursorTarget.SetMount:
-                        if (SelectedObject.Object is Mobile m)
+                        if (SelectedObject.Object is Entity entity && (entity is Mobile || entity is Item))
                         {
-                            if (SerialHelper.IsMobile(m))
-                            {
-                                ProfileManager.CurrentProfile.SavedMountSerial = m;
-                                Entity mount = _world.Get(m);
-                                string mountName = mount?.Name ?? "mount";
-                                GameActions.Print(_world, $"Mount set: {mountName} (Serial: {m.Serial})", 48);
-                            }
+                            ProfileManager.CurrentProfile.SavedMountSerial = entity.Serial;
+                            Entity mount = _world.Get(entity.Serial);
+                            string mountName = mount?.Name ?? "mount";
+                            GameActions.Print(_world, $"Mount set: {mountName} (Serial: {entity.Serial})", 48);
                             _world.TargetManager.Reset();
                         }
                         else
                         {
-                            GameActions.Print(_world, "You must target a mobile/creature to set as your mount.", 32);
+                            GameActions.Print(_world, "You must target a creature or mount item to set as your mount.", 32);
                         }
 
                         break;
@@ -1097,7 +1094,6 @@ namespace ClassicUO.Game.Scenes
                 return false;
             }
 
-            _rightMousePressed = true;
             _continueRunning = false;
             StopFollowing();
 
@@ -1105,6 +1101,10 @@ namespace ClassicUO.Game.Scenes
             {
                 if ((ProfileManager.CurrentProfile.UseShiftToPathfind && !HotKeys.IsPressed(HotKeyRegistrar.PathfindId)) || ProfileManager.CurrentProfile.PathfindSingleClick)
                 {
+                    // Pathfinding is not requested for this click, so mirror OnRightMouseDown: the
+                    // second click of a rapid pair still counts as holding the button to walk.
+                    _rightMousePressed = true;
+
                     return false;
                 }
 
@@ -1123,6 +1123,10 @@ namespace ClassicUO.Game.Scenes
                                 TextType.CLIENT
                             );
 
+                            // The pathfinder drives movement now. Leave _rightMousePressed false so
+                            // MoveCharacterByMouseInput does not override it with a cursor walk —
+                            // the release is skipped after a consumed double-click, so nothing would
+                            // reset it afterwards.
                             return true;
                         }
                     }
@@ -1149,6 +1153,8 @@ namespace ClassicUO.Game.Scenes
                 //    }
                 //}
             }
+
+            _rightMousePressed = true;
 
             return false;
         }
@@ -1516,7 +1522,6 @@ namespace ClassicUO.Game.Scenes
 
             if (CanExecuteMacro())
             {
-                SpellBarManager.KeyPress(key, e.mod);
                 SelfHealManager.HandleKeyDown(key, e.mod, e.repeat);
                 ClassicUO.Game.Managers.Hotkeys.HotKeys.HandleKeyDown(key, e.mod, e.repeat);
 
@@ -1803,8 +1808,6 @@ namespace ClassicUO.Game.Scenes
 
             if (CanExecuteMacro())
             {
-                SpellBarManager.ControllerInput((SDL.SDL_GamepadButton)e.button);
-
                 Macro macro = _world.Macros.FindMacro((SDL.SDL_GamepadButton)e.button);
                 if (macro != null && macro.Items is MacroObject mac)
                 {

@@ -60,6 +60,9 @@ namespace ClassicUO.Game.Managers
         Moveable = 1 << 20,
         Immoveable = 1 << 21,
 
+        // Mobiles cont.
+        Warmode = 1 << 22,
+
         AllItems = Containers | Gold | Stackable | LockedDown | Moveable | Immoveable | Other,
         AllMobiles = Humanoid | Monster | OwnFollowers | Self,
         MobilesAndCorpses = AllMobiles | MonsterCorpses | HumanoidCorpses,
@@ -167,6 +170,9 @@ namespace ClassicUO.Game.Managers
 
         public static bool IsShowing => IsPermaToggled || IsTemporarilyShowing || HotKeys.IsPressed(HotKeyRegistrar.ShowNameplatesId);
 
+        /// <summary>True while a nameplate hotkey is held, regardless of the Stay active toggle.</summary>
+        public static bool IsHotkeyHeld => IsTemporarilyShowing || HotKeys.IsPressed(HotKeyRegistrar.ShowNameplatesId);
+
         private static List<NameOverheadOption> Options { get; set; } = new List<NameOverheadOption>();
 
         public bool IsAllowed(Entity serial)
@@ -201,6 +207,9 @@ namespace ClassicUO.Game.Managers
                 return true;
 
             if (ActiveOverheadOptions.HasFlag(NameOverheadOptions.OwnFollowers) && mobile.IsRenamable && mobile.NotorietyFlag != NotorietyFlag.Invulnerable && mobile.NotorietyFlag != NotorietyFlag.Enemy)
+                return true;
+
+            if (ActiveOverheadOptions.HasFlag(NameOverheadOptions.Warmode) && mobile.InWarMode)
                 return true;
 
             // Mobile notorieties

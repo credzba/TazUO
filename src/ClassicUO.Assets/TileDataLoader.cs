@@ -20,6 +20,27 @@ namespace ClassicUO.Assets
         public ref LandTiles[] LandData => ref _landData;
         public ref StaticTiles[] StaticData => ref _staticData;
 
+        private static StaticTiles _emptyStaticTile = new StaticTiles(0, 0, 0, 0, 0, 0, 0, 0, string.Empty);
+
+        /// <summary>
+        ///     Returns the static tile data for <paramref name="graphic" />, or an empty entry when
+        ///     the index falls outside the loaded tiledata. A server, multi definition or custom
+        ///     house can name a static graphic the local <c>tiledata.mul</c> does not describe (a
+        ///     truncated or non-standard file, or art newer than the data files); indexing the
+        ///     array directly would throw instead of rendering an empty tile.
+        /// </summary>
+        /// <param name="graphic">Static graphic index to look up.</param>
+        /// <returns>A reference to the tile's data, or to an empty entry when the index is out of range.</returns>
+        public ref StaticTiles GetStaticTile(int graphic)
+        {
+            if (_staticData != null && (uint)graphic < (uint)_staticData.Length)
+            {
+                return ref _staticData[graphic];
+            }
+
+            return ref _emptyStaticTile;
+        }
+
         public override void Load()
         {
             string path = FileManager.GetUOFilePath("tiledata.mul");
@@ -362,7 +383,7 @@ namespace ClassicUO.Assets
     {
         public uint Flags;
         public ushort TexID;
-        [MarshalAs(UnmanagedType.LPStr, SizeConst = 20)]
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 20)]
         public string Name;
     }
 
@@ -385,7 +406,7 @@ namespace ClassicUO.Assets
         public ushort Hue;
         public ushort LightIndex;
         public byte Height;
-        [MarshalAs(UnmanagedType.LPStr, SizeConst = 20)]
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 20)]
         public string Name;
     }
 
@@ -404,7 +425,7 @@ namespace ClassicUO.Assets
     {
         public TileFlag Flags;
         public ushort TexID;
-        [MarshalAs(UnmanagedType.LPStr, SizeConst = 20)]
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 20)]
         public string Name;
     }
 
@@ -427,7 +448,7 @@ namespace ClassicUO.Assets
         public ushort Hue;
         public ushort LightIndex;
         public byte Height;
-        [MarshalAs(UnmanagedType.LPStr, SizeConst = 20)]
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 20)]
         public string Name;
     }
 

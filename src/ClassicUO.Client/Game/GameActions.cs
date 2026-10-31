@@ -164,14 +164,10 @@ internal static class GameActions
     }
 
     /// <summary>
-    /// Closes a currently opened settings window.
-    /// Note that this method attempts to close only the setting window currently defined as 'in-use' by the <see cref="Profile.UseNewOptionsWindow"/> property
+    /// Closes the currently opened settings window.
     /// </summary>
     /// <returns>False if no settings are open</returns>
-    internal static bool CloseSettings() =>
-        ProfileManager.CurrentProfile?.UseNewOptionsWindow == false
-            ? CloseSingletonGump<ModernOptionsGump>()
-            : CloseSingletonGump<NewOptionsWindow>();
+    internal static bool CloseSettings() => CloseSingletonGump<NewOptionsWindow>();
 
     private static bool CloseSingletonGump<TGump>() where TGump : class, IGui
     {
@@ -183,17 +179,10 @@ internal static class GameActions
         return true;
     }
 
-    internal static void OpenSettings(World world, int page = 0)
-    {
-        // Default to new window if unset
-        if (ProfileManager.CurrentProfile?.UseNewOptionsWindow == false)
-            ShowLegacyOptionsGump(world, page);
-        else
-            ShowNewOptionsGump();
-    }
+    internal static void OpenSettings(World world, int page = 0) => ShowNewOptionsGump();
 
     /// <summary>
-    /// Creates or opens the new options window
+    /// Creates or opens the options window
     /// </summary>
     public static void ShowNewOptionsGump()
     {
@@ -202,30 +191,6 @@ internal static class GameActions
             UIManager.Add(new NewOptionsWindow());
         else
             existing.BringOnTop();
-    }
-
-    /// <summary>
-    /// Creates or opens the legacy options window
-    /// </summary>
-    /// <param name="world">The world instance the gump belongs to</param>
-    /// <param name="page">The specific page to open</param>
-    public static void ShowLegacyOptionsGump(World world, int page = 0)
-    {
-        ModernOptionsGump opt = UIManager.GetGump<ModernOptionsGump>();
-
-        if (opt == null)
-        {
-            var optionsGump = new ModernOptionsGump(world);
-
-            UIManager.Add(optionsGump);
-            optionsGump.ChangePage(page);
-            optionsGump.SetInScreen();
-        }
-        else
-        {
-            opt.SetInScreen();
-            opt.BringOnTop();
-        }
     }
 
     internal static void OpenStatusBar(World world)
@@ -1173,6 +1138,7 @@ internal static class GameActions
             LastSpellIndex = index;
             SpellVisualRangeManager.Instance.ClearCasting();
             Socket.Send_CastSpellFromBook(index, bookSerial);
+            SpellVisualRangeManager.Instance.BeginCastingFromClient(index);
         }
     }
 
@@ -1251,6 +1217,7 @@ internal static class GameActions
             LastSpellIndex = index;
             SpellVisualRangeManager.Instance.ClearCasting();
             Socket.Send_CastSpell(index);
+            SpellVisualRangeManager.Instance.BeginCastingFromClient(index);
 
             // Record action for script recording
             string name = SpellDefinition.FullIndexGetSpell(index).Name;
@@ -1288,19 +1255,40 @@ internal static class GameActions
 
     public static void Logout(World world)
     {
-        LastEquipmentManager.Save(world.Player.GetEquippedItems(), ProfileManager.CurrentProfile.ServerName, world.Player.Name, ProfileManager.CurrentProfile.Username, world.Player.Graphic, world.Player.Hue, world.Player.IsFemale);
+        if (world == null)
+            return;
+
+        // The player or profile can already be gone when the confirmation is answered during
+        // teardown (or a script calls this from outside the game); skip the snapshot then.
+        if (world.Player != null && ProfileManager.CurrentProfile != null)
+        {
+            LastEquipmentManager.Save(
+                world.Player.GetEquippedItems(),
+                ProfileManager.CurrentProfile.ServerName,
+                world.Player.Name,
+                ProfileManager.CurrentProfile.Username,
+                world.Player.Graphic,
+                world.Player.Hue,
+                world.Player.IsFemale
+            );
+        }
 
         LoginHandshake.Reconnect = false;
         WorldMapGump.ClearMapCache();
 
+        GameScene scene = Client.Game.GetScene<GameScene>();
+
+        if (scene == null)
+            return;
+
+        scene.DisconnectionRequested = true;
+
         if ((world.ClientFeatures.Flags & CharacterListFlags.CLF_OWERWRITE_CONFIGURATION_BUTTON) != 0)
         {
-            Client.Game.GetScene<GameScene>().DisconnectionRequested = true;
-            Socket.Send_LogoutNotification();
+            Socket?.Send_LogoutNotification();
         }
         else
         {
-            Client.Game.GetScene<GameScene>().DisconnectionRequested = true;
             Client.Game.SetScene(new LoginScene(world));
 
             Socket?.Disconnect();
@@ -1498,11 +1486,22 @@ internal static class GameActions
             );
     }
 
-    public static void RequestEquippedOPL(World world)
+    public static void RequestEquippedOPL(World world) => RequestEquippedOPL(world, world.Player);
+
+    /// <summary>
+    ///     Requests the tooltip property lists of every item a mobile has equipped, so information
+    ///     derived from them (such as equipment durability) can be tracked for that mobile.
+    /// </summary>
+    /// <param name="world">The active world.</param>
+    /// <param name="mobile">The mobile whose equipment should be requested. No-op when <see langword="null" />.</param>
+    public static void RequestEquippedOPL(World world, Mobile mobile)
     {
+        if (mobile == null)
+            return;
+
         foreach (Layer layer in Enum.GetValues(typeof(Layer)))
         {
-            Item item = world.Player.FindItemByLayer(layer);
+            Item item = mobile.FindItemByLayer(layer);
             if(item == null) continue;
 
             world.OPL.Contains(item); //Requests data if we don't have it
@@ -1510,7 +1509,8 @@ internal static class GameActions
     }
 
     /// <summary>
-    ///     Double-clicks the player's saved mount to mount up.
+    ///     Double-clicks the player's saved mount to mount up. The saved mount may be a creature or
+    ///     a mount item on some servers, including one held in a container.
     /// </summary>
     /// <param name="useQueue">
     ///     If <see langword="true" />, routes through <see cref="DoubleClickQueued(uint, bool)" />.
@@ -1533,7 +1533,11 @@ internal static class GameActions
         if (mount == null)
             return MountResult.MountNotFound;
 
-        if (mount.Distance > profile.MountDistance)
+        // Items held in a container use container-relative coordinates, so their Distance is
+        // meaningless. They are always reachable by double-click.
+        bool isContainedItem = mount is Item { OnGround: false };
+
+        if (!isContainedItem && mount.Distance > profile.MountDistance)
             return MountResult.MountTooFar;
 
         if (useQueue)

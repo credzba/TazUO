@@ -460,7 +460,8 @@ namespace ClassicUO.Game.Managers
         /// </summary>
         public static void AutoSaveGumpPositionIfEnabled(Gump gump)
         {
-            if (gump == null || gump.ServerSerial == 0)
+            // Non-movable gumps are placed by the server; pinning them would freeze a server-chosen spot for good.
+            if (gump == null || gump.ServerSerial == 0 || !gump.CanMove)
                 return;
 
             if (gump.IsNotMovable)
@@ -725,10 +726,16 @@ namespace ClassicUO.Game.Managers
 
         public static void Clear()
         {
-            foreach (IGui s in Gumps)
+            // Snapshot before disposing: a gump's Dispose can add or remove gumps (event
+            // handlers, anchoring, scripts), which would invalidate a live enumeration of Gumps.
+            var snapshot = new IGui[Gumps.Count];
+            Gumps.CopyTo(snapshot, 0);
+
+            foreach (IGui gump in snapshot)
             {
-                s.Dispose();
+                gump.Dispose();
             }
+
             Gumps.Clear();
 
             // The whole tree is gone; a cached hit-test result pointing into it must not survive.

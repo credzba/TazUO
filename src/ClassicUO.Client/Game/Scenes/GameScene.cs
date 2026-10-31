@@ -6,6 +6,7 @@ using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
+using ClassicUO.Game.Managers.EnhancedMap;
 using ClassicUO.Game.Managers.Hotkeys;
 using ClassicUO.Game.UI;
 using ClassicUO.Game.UI.Controls;
@@ -75,9 +76,7 @@ namespace ClassicUO.Game.Scenes
 
         private Point3D _lastSelectedMultiPositionInHouseCustomization;
         private int _lightCount;
-        private readonly LightData[] _lights = new LightData[
-            LightsLoader.MAX_LIGHTS_DATA_INDEX_COUNT
-        ];
+        private readonly LightData[] _lights = new LightData[MAX_LIGHTS_PER_FRAME];
 
         // Drawn opaque tiles that can occlude a light, bucketed by isometric column (X - Y); rebuilt each frame, queried by AddLight.
         private readonly Dictionary<int, List<LightOccluder>> _lightOccluders =
@@ -91,6 +90,13 @@ namespace ClassicUO.Game.Scenes
 
         private uint _timeToPlaceMultiInHouseCustomization;
         private const int MAX_TEXTURE_SIZE = 8192;
+
+        // Light sources collected per frame. Lights are gathered back to front, so once full the ones nearest the camera
+        // are dropped: keep it well above what a crowded, zoomed-out view plus the off-screen light margin can hold.
+        private const int MAX_LIGHTS_PER_FRAME = 1024;
+        // Highest top (Z + height) a tile object may reach and still be drawn: the map's max Z plus the tallest tile, so
+        // tall statics standing near the top of the map aren't cut off.
+        private const int MAX_RENDER_Z = sbyte.MaxValue + byte.MaxValue;
 
         // An occluder d tiles in front of a light must stand ~11*d z-units above it to cover it on screen; slop is the tile-thickness leniency.
         private const int LIGHT_OCCLUSION_STEP = 11;
@@ -261,8 +267,8 @@ namespace ClassicUO.Game.Scenes
             HotKeys.Load();
             HotKeyRegistrar.RegisterAll();
             ScriptHotkeysManager.RegisterAll();
-            SpellBarManager.Load();
             SelfHealManager.Load();
+            EnhancedMapManager.Instance.Start();
             if(ProfileManager.CurrentProfile.EnableCaveBorder)
                 StaticFilters.ApplyCaveTileBorder();
 
@@ -408,7 +414,6 @@ namespace ClassicUO.Game.Scenes
             JournalFilterManager.Instance.Save();
 
             ScreenOverlayManager.Instance.Reset();
-            SpellBarManager.Unload();
             SelfHealManager.Unload();
             _autoUnequipActionManager?.Dispose();
             ObjectActionQueue.Instance.Clear();
@@ -422,15 +427,15 @@ namespace ClassicUO.Game.Scenes
             BandageManager.Instance.Dispose();
             DressAgentManager.Instance.Unload();
 
-            ProfileManager.CurrentProfile.GameWindowPosition = new Point(
+            ProfileManager.CurrentProfile?.GameWindowPosition = new Point(
                 Camera.Bounds.X,
                 Camera.Bounds.Y
             );
-            ProfileManager.CurrentProfile.GameWindowSize = new Point(
+            ProfileManager.CurrentProfile?.GameWindowSize = new Point(
                 Camera.Bounds.Width,
                 Camera.Bounds.Height
             );
-            ProfileManager.CurrentProfile.DefaultScale = Camera.Zoom;
+            ProfileManager.CurrentProfile?.DefaultScale = Camera.Zoom;
 
             Client.Game.Audio?.StopMusic();
             Client.Game.Audio?.StopSounds();
@@ -456,6 +461,7 @@ namespace ClassicUO.Game.Scenes
 
             ProfileManager.CurrentProfile?.Save(_world, ProfileManager.ProfilePath);
             MapWebServerManager.Instance.Stop();
+            EnhancedMapManager.Instance.Stop();
             TileMarkerManager.Instance.Save();
             SpellVisualRangeManager.Instance.Save();
             SpellVisualRangeManager.Instance.OnSceneUnload();
@@ -576,7 +582,7 @@ namespace ClassicUO.Game.Scenes
         public void AddLight(GameObject obj, GameObject lightObject, int x, int y)
         {
             if (
-                _lightCount >= LightsLoader.MAX_LIGHTS_DATA_INDEX_COUNT
+                _lightCount >= MAX_LIGHTS_PER_FRAME
                 || !UseLights && !UseAltLights
                 || obj == null
             )
@@ -677,7 +683,7 @@ namespace ClassicUO.Game.Scenes
                     }
                     else
                     {
-                        ref StaticTiles data = ref Client.Game.UO.FileManager.TileData.StaticData[obj.Graphic];
+                        ref StaticTiles data = ref Client.Game.UO.FileManager.TileData.GetStaticTile(obj.Graphic);
                         light.Id = data.Layer;
                     }
                 }
@@ -724,21 +730,49 @@ namespace ClassicUO.Game.Scenes
         private const int STATIC_PRELOAD_CHUNK_MARGIN = 2;
 
         /// <summary>
+        /// Extra tiles the chunk walk must cover beyond the viewport so light halos survive.
+        /// </summary>
+        /// <remarks>
+        /// A light source is only collected when its tile is walked, but its halo is drawn from the
+        /// source and reaches several tiles into the viewport. Walking this margin keeps emitters
+        /// just off screen in play, so their glow scrolls in with the camera instead of popping. The
+        /// walk range is also preloaded by <see cref="PreloadStaticChunkMargin"/>.
+        /// </remarks>
+        private int LightWalkMarginTiles
+        {
+            get
+            {
+                if (!UseLights && !UseAltLights)
+                {
+                    return 0;
+                }
+
+                int halfHalo = Client.Game.UO.FileManager.Lights.MaxLightDimension >> 1;
+
+                return (halfHalo + SCREEN_STEP_PER_TILE - 1) / SCREEN_STEP_PER_TILE;
+            }
+        }
+
+        /// <summary>
         /// Loads the chunks forming a ring <see cref="STATIC_PRELOAD_CHUNK_MARGIN"/> chunks wide
-        /// just outside the viewport.
+        /// just outside the walked tile range.
         /// </summary>
         /// <remarks>
         /// Statics are drawn from their base tile, so a chunk must be resident before that
         /// tile scrolls into view or the art pops in at the screen edge. Preloading the ring
-        /// gives the async load a full chunk of lead time; the render loop still only walks
-        /// the viewport chunks, so no extra objects are added to the render list.
+        /// gives the async load a full chunk of lead time before the render loop walks it.
         /// </remarks>
-        private void PreloadStaticChunkMargin(Map.Map map)
+        /// <param name="map">Map whose chunks are loaded.</param>
+        /// <param name="minTileX">Left edge of the walked tile range.</param>
+        /// <param name="minTileY">Top edge of the walked tile range.</param>
+        /// <param name="maxTileX">Right edge of the walked tile range.</param>
+        /// <param name="maxTileY">Bottom edge of the walked tile range.</param>
+        private void PreloadStaticChunkMargin(Map.Map map, int minTileX, int minTileY, int maxTileX, int maxTileY)
         {
-            int viewMinChunkX = (int)_minTile.X >> 3;
-            int viewMinChunkY = (int)_minTile.Y >> 3;
-            int viewMaxChunkX = (int)_maxTile.X >> 3;
-            int viewMaxChunkY = (int)_maxTile.Y >> 3;
+            int viewMinChunkX = minTileX >> 3;
+            int viewMinChunkY = minTileY >> 3;
+            int viewMaxChunkX = maxTileX >> 3;
+            int viewMaxChunkY = maxTileY >> 3;
 
             int preloadMinChunkX = Math.Max(0, viewMinChunkX - STATIC_PRELOAD_CHUNK_MARGIN);
             int preloadMinChunkY = Math.Max(0, viewMinChunkY - STATIC_PRELOAD_CHUNK_MARGIN);
@@ -793,6 +827,11 @@ namespace ClassicUO.Game.Scenes
             {
                 return;
             }
+
+            // Spend a small, bounded slice of main-thread time decoding static art queued by chunk
+            // loads, before the render lists are built, so newly seen statics do not all decode
+            // synchronously in a single draw.
+            Client.Game.UO.Arts.WarmQueued();
 
             _alphaChanged = _alphaTimer < Time.Ticks;
 
@@ -863,6 +902,12 @@ namespace ClassicUO.Game.Scenes
                     _world.NameOverHeadManager.Close();
                 }
             }
+            else if (_useObjectHandles && NameOverHeadManager.IsHotkeyHeld)
+            {
+                // With Stay active the showing state never flips, so a settings gump closed by right-click
+                // would never come back; holding the hotkey reopens it. Open() only recreates a disposed gump.
+                _world.NameOverHeadManager.Open();
+            }
 
             _rectanglePlayer.X = (int)(
                 _world.Player.RealScreenPosition.X
@@ -879,10 +924,11 @@ namespace ClassicUO.Game.Scenes
             _rectanglePlayer.Width = _world.Player.FrameInfo.Width;
             _rectanglePlayer.Height = _world.Player.FrameInfo.Height;
 
-            int minX = _minTile.X;
-            int minY = _minTile.Y;
-            int maxX = _maxTile.X;
-            int maxY = _maxTile.Y;
+            int lightMarginTiles = LightWalkMarginTiles;
+            int minX = Math.Max(0, _minTile.X - lightMarginTiles);
+            int minY = Math.Max(0, _minTile.Y - lightMarginTiles);
+            int maxX = _maxTile.X + lightMarginTiles;
+            int maxY = _maxTile.Y + lightMarginTiles;
             Map.Map map = _world.Map;
             bool useHandles = _useObjectHandles;
             int maxCotZ = _world.Player.Z + 5;
@@ -895,7 +941,7 @@ namespace ClassicUO.Game.Scenes
             int totalChunksX = maxChunkX - minChunkX + 1;
             int totalChunksY = maxChunkY - minChunkY + 1;
 
-            PreloadStaticChunkMargin(map);
+            PreloadStaticChunkMargin(map, minX, minY, maxX, maxY);
 
             for (int chunkXIdx = 0; chunkXIdx < totalChunksX; chunkXIdx++)
             {
@@ -926,7 +972,7 @@ namespace ClassicUO.Game.Scenes
                         if (firstObj?.IsDestroyed != false)
                             continue;
 
-                        AddTileToRenderList(firstObj, useHandles, 150, maxCotZ, ref playerPos);
+                        AddTileToRenderList(firstObj, useHandles, MAX_RENDER_Z, maxCotZ, ref playerPos);
                     }
                 }
             }
@@ -1119,6 +1165,7 @@ namespace ClassicUO.Game.Scenes
             AutoLootManager.Instance.Update();
             ScavengerManager.Instance.Update();
             BandageManager.Instance.Update();
+            EnhancedMapManager.Instance.Update();
             GridHighlightData.ProcessQueue(_world);
             Profiler.ExitContext("Actions");
 
@@ -1134,9 +1181,14 @@ namespace ClassicUO.Game.Scenes
                     _flags[3]
                 );
 
-                if (_world.InGame && !_world.Player.Pathfinder.AutoWalking && dir != Direction.NONE)
+                if (_world.InGame && dir != Direction.NONE)
                 {
-                    _world.Player.Walk(dir, currentProfile.AlwaysRun);
+                    StopFollowing();
+
+                    if (!_world.Player.Pathfinder.AutoWalking)
+                    {
+                        _world.Player.Walk(dir, currentProfile.AlwaysRun);
+                    }
                 }
             }
 

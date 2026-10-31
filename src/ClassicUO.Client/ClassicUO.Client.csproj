@@ -50,7 +50,6 @@
     <ProjectReference Include="..\ClassicUO.Utility\ClassicUO.Utility.csproj" />
     <ProjectReference Include="..\ClassicUO.CUOAPI\ClassicUO.CUOAPI.csproj" />
     <ProjectReference Include="..\..\tools\EventGenerator\EventGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\ClassicUO.SourceGenerators\ClassicUO.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\external\Myra\src\Myra\Myra.FNA.Core.csproj" />
   </ItemGroup>
 
@@ -73,7 +72,7 @@
 
   <ItemGroup>
     <PackageReference Include="IronPython" Version="3.4.2" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.12.0" />
     <PackageReference Include="Vosk" Version="0.3.38" />
   </ItemGroup>
@@ -96,7 +95,8 @@
   </Target>
 
   <ItemGroup>
-    <DocSourceFiles Include="$(ProjectDir)/LegionScripting/ApiClasses/*.cs" />
+    <!-- Recursive: a class's folder under ApiClasses becomes its documentation page's folder. -->
+    <DocSourceFiles Include="$(ProjectDir)/LegionScripting/ApiClasses/**/*.cs" />
     <DocSourceFiles Include="LegionScripting\LegionAPI.cs" />
     <DocSourceFiles Include="$(BaseIntermediateOutputPath)/generated/EventGenerator/**/*.Api.Decl.g.cs" />
   </ItemGroup>

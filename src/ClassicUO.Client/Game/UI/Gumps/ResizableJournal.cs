@@ -555,6 +555,12 @@ namespace ClassicUO.Game.UI.Gumps
             private SelectionPoint? _selectionActive;
             private bool _isSelecting;
 
+            /// <summary>
+            /// While the user is selecting (or holding) text, new entries must not snap the view to
+            /// the bottom, otherwise the content shifts out from under the cursor mid-selection.
+            /// </summary>
+            private bool AutoScrollPaused => _isSelecting || TryGetSelectionRange(out _, out _);
+
             public JournalEntriesContainer(int x, int y, int width, int height, ScrollBarBase scrollBarControl, ResizableJournal resizableJournal)
             {
                 _resizableJournal = resizableJournal;
@@ -572,6 +578,13 @@ namespace ClassicUO.Game.UI.Gumps
 
                 WantUpdateSize = false;
             }
+
+            /// <summary>
+            /// Only claim keyboard focus while the user is selecting text, so merely clicking the
+            /// journal cannot take arrow keys, Enter, or hotkeys away from the game.
+            /// </summary>
+            public override bool AcceptKeyboardInput =>
+                base.AcceptKeyboardInput && (_isSelecting || TryGetSelectionRange(out _, out _));
 
             public override bool Draw(UltimaBatcher2D batcher, int x, int y)
             {
@@ -626,6 +639,9 @@ namespace ClassicUO.Game.UI.Gumps
                     {
                         _isSelecting = false;
                         CanMove = true;
+
+                        if (!TryGetSelectionRange(out _, out _))
+                            ClearSelection();
                     }
                 }
 
@@ -650,7 +666,7 @@ namespace ClassicUO.Game.UI.Gumps
 
             public void CalculateScrollBarMaxValue()
             {
-                bool maxValue = _scrollBar.Value == _scrollBar.MaxValue;
+                bool maxValue = _scrollBar.Value == _scrollBar.MaxValue && !AutoScrollPaused;
                 int height = 0;
 
                 foreach (JournalData _ in journalDatas)
@@ -681,7 +697,7 @@ namespace ClassicUO.Game.UI.Gumps
 
             public void AddEntry(string text, ushort hue, DateTime time, TextType text_type, MessageType messageType)
             {
-                bool maxScroll = _scrollBar.Value == _scrollBar.MaxValue;
+                bool maxScroll = _scrollBar.Value == _scrollBar.MaxValue && !AutoScrollPaused;
 
                 while (journalDatas.Count > (ProfileManager.CurrentProfile == null ? 200 : ProfileManager.CurrentProfile.MaxJournalEntries))
                 {
@@ -730,15 +746,15 @@ namespace ClassicUO.Game.UI.Gumps
                 {
                     if (TryGetSelectionPointFromText(x, y, out SelectionPoint point))
                     {
-                        SetKeyboardFocus();
-                        CanMove = false;
                         _isSelecting = true;
                         _selectionAnchor = point;
                         _selectionActive = point;
+                        SetKeyboardFocus();
+                        CanMove = false;
                         return;
                     }
 
-                    CanMove = true;
+                    ClearSelection();
                 }
 
                 base.OnMouseDown(x, y, button);
@@ -762,6 +778,10 @@ namespace ClassicUO.Game.UI.Gumps
                     UpdateSelectionFromMouse(x, y);
                     _isSelecting = false;
                     CanMove = true;
+
+                    if (!TryGetSelectionRange(out _, out _))
+                        ClearSelection();
+
                     return;
                 }
 
@@ -773,8 +793,13 @@ namespace ClassicUO.Game.UI.Gumps
                 switch (key)
                 {
                     case SDL.SDL_Keycode.SDLK_C when Keyboard.Ctrl:
-                        CopySelection();
-                        return;
+                        if (TryGetSelectionRange(out _, out _))
+                        {
+                            CopySelection();
+                            return;
+                        }
+
+                        break;
 
                     case SDL.SDL_Keycode.SDLK_A when Keyboard.Ctrl:
                         SelectAllVisible();
@@ -785,8 +810,24 @@ namespace ClassicUO.Game.UI.Gumps
                         return;
                 }
 
+                // Hand focus back to the game for anything the journal does not consume. The scene
+                // handles this same key event right after this callback, so movement, Enter-to-chat,
+                // and hotkeys keep working while a selection is still highlighted.
+                if (!IsBareModifier(key))
+                    ReleaseKeyboardFocus();
+
                 base.OnKeyDown(key, mod);
             }
+
+            private static bool IsBareModifier(SDL.SDL_Keycode key) =>
+                key is SDL.SDL_Keycode.SDLK_LSHIFT
+                    or SDL.SDL_Keycode.SDLK_RSHIFT
+                    or SDL.SDL_Keycode.SDLK_LCTRL
+                    or SDL.SDL_Keycode.SDLK_RCTRL
+                    or SDL.SDL_Keycode.SDLK_LALT
+                    or SDL.SDL_Keycode.SDLK_RALT
+                    or SDL.SDL_Keycode.SDLK_LGUI
+                    or SDL.SDL_Keycode.SDLK_RGUI;
 
             private void UpdateSelectionFromMouse(int x, int y)
             {
@@ -1110,6 +1151,21 @@ namespace ClassicUO.Game.UI.Gumps
                 _selectionActive = null;
                 _isSelecting = false;
                 CanMove = true;
+                ReleaseKeyboardFocus();
+            }
+
+            /// <summary>
+            /// Returns keyboard focus to the system chat, which the game treats as "the world has
+            /// input focus". Assigned directly (rather than through <see cref="UIManager"/>'s chat
+            /// helper) because the key event currently being dispatched checks the focus right after
+            /// this call and must see the chat box already in place.
+            /// </summary>
+            private void ReleaseKeyboardFocus()
+            {
+                if (!HasKeyboardFocus)
+                    return;
+
+                UIManager.KeyboardFocusControl = UIManager.SystemChat?.TextBoxControl;
             }
 
             private bool CanBeDrawn(TextType type, MessageType messageType)

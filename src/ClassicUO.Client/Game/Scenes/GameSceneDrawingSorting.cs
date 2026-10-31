@@ -38,6 +38,10 @@ namespace ClassicUO.Game.Scenes
         private const int SPRITE_BASE_OFFSET_PIXELS = 44;
         private const int SPRITE_CENTER_OFFSET_PIXELS = 22;
 
+        // A tile advances 22 screen pixels along either isometric axis. Used to convert the light
+        // halo cull margin into the extra tiles the chunk walk must cover.
+        private const int SCREEN_STEP_PER_TILE = 22;
+
         private sbyte _maxGroundZ;
         private int _maxZ;
         private Vector2 _minPixel,
@@ -155,9 +159,11 @@ namespace ClassicUO.Game.Scenes
 
                     if (tileZ > pz14 && _maxZ > tileZ)
                     {
-                        ref StaticTiles itemdata = ref Client.Game.UO.FileManager.TileData.StaticData[
+                        // Effects (e.g. a lightning strike above the player) can carry a graphic the
+                        // local tiledata does not describe; the safe accessor keeps the draw going.
+                        ref StaticTiles itemdata = ref Client.Game.UO.FileManager.TileData.GetStaticTile(
                             obj.Graphic
-                        ];
+                        );
 
                         //if (GameObjectHelper.TryGetStaticData(obj, out var itemdata) && ((ulong) itemdata.Flags & 0x20004) == 0 && (!itemdata.IsRoof || itemdata.IsSurface))
                         if (
@@ -204,9 +210,9 @@ namespace ClassicUO.Game.Scenes
                         {
                             if (!(obj2 is Land))
                             {
-                                ref StaticTiles itemdata = ref Client.Game.UO.FileManager.TileData.StaticData[
+                                ref StaticTiles itemdata = ref Client.Game.UO.FileManager.TileData.GetStaticTile(
                                     obj2.Graphic
-                                ];
+                                );
 
                                 if (((ulong)itemdata.Flags & 0x204) == 0 && itemdata.IsRoof)
                                 {
@@ -377,7 +383,8 @@ namespace ClassicUO.Game.Scenes
             {
                 if (Vector2.Distance(new Vector2(obj.RealScreenPosition.X, obj.RealScreenPosition.Y), playerPos) < ProfileManager.GlobalSettings.CircleOfTransparencyRadius)
                 {
-                    if (obj.Z >= _maxZ)
+                    // _maxZ stays at the map ceiling (127) when nothing is overhead: nothing to hide then.
+                    if (obj.Z >= _maxZ && _maxZ < 127)
                     {
                         obj.AlphaHue = 0;
                         //CalculateAlpha(ref obj.AlphaHue, 0);
@@ -409,7 +416,8 @@ namespace ClassicUO.Game.Scenes
                     }
                 }
             }
-            if (obj.Z >= _maxZ)
+            // _maxZ stays at the map ceiling (127) when nothing is overhead: nothing to hide then.
+            if (obj.Z >= _maxZ && _maxZ < 127)
             {
                 bool changed;
 
@@ -570,7 +578,67 @@ namespace ClassicUO.Game.Scenes
         }
 
         /// <summary>
-        /// Tests whether a statics/multi sprite is fully below the viewport bottom.
+        /// Extra cull margin, in pixels, for an object that emits light. Zero when lighting is off.
+        /// </summary>
+        /// <remarks>
+        /// The halo is drawn centered on the source and reaches half the light texture past it in
+        /// every direction, which is far larger than the source art. Without this the source is
+        /// culled while its glow is still on screen, and the glow pops at the edge.
+        /// </remarks>
+        private int LightHaloCullMargin
+        {
+            get
+            {
+                if (!UseLights && !UseAltLights)
+                {
+                    return 0;
+                }
+
+                return Client.Game.UO.FileManager.Lights.MaxLightDimension >> 1;
+            }
+        }
+
+        /// <summary>
+        /// Tests whether an object is a light source whose halo must be kept alive past its art.
+        /// </summary>
+        /// <param name="obj">Object being culled.</param>
+        /// <param name="itemData">The object's static tile data, whose flags mark most light sources.</param>
+        /// <returns>True when the object draws a light halo.</returns>
+        private static bool EmitsLight(GameObject obj, ref StaticTiles itemData)
+        {
+            if (itemData.IsLight)
+            {
+                return true;
+            }
+
+            // ItemView also lights a few graphics that the tile flags miss.
+            if (obj is Item item)
+            {
+                ushort graphic = item.DisplayedGraphic;
+
+                return (graphic >= 0x3E02 && graphic <= 0x3E0B)
+                    || (graphic >= 0x3914 && graphic <= 0x3929);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Resolves the art a static/item actually draws, following the animation offset that
+        /// <c>DrawStaticAnimated</c> applies, so culling measures the same sprite that is rendered.
+        /// </summary>
+        /// <param name="graphic">Base graphic id.</param>
+        /// <returns>Sprite info for the drawn frame, or an empty sprite when there is no art.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ref readonly SpriteInfo GetCullArt(ushort graphic)
+        {
+            ref var index = ref Client.Game.UO.FileManager.Arts.File.GetValidRefEntry(graphic + 0x4000);
+
+            return ref Client.Game.UO.Arts.GetArt((ushort)(graphic + index.AnimOffset));
+        }
+
+        /// <summary>
+        /// Tests whether a tile-anchored sprite is fully below the viewport bottom.
         /// </summary>
         /// <remarks>
         /// These sprites are anchored at their base tile and grow upward (see
@@ -581,44 +649,49 @@ namespace ClassicUO.Game.Scenes
         /// </remarks>
         /// <param name="screenY">Sprite base Y in viewport space.</param>
         /// <param name="graphic">Graphic id whose art height defines the upward extent.</param>
+        /// <param name="margin">Extra reach (shadow/light) to keep while it still overlaps.</param>
         /// <returns>True when no part of the sprite can be visible.</returns>
-        private bool IsBelowViewportBottom(int screenY, ushort graphic)
+        private bool IsBelowViewportBottom(int screenY, ushort graphic, int margin = 0)
         {
-            if (screenY <= _maxPixel.Y)
+            if (screenY <= _maxPixel.Y + margin)
             {
                 return false;
             }
 
-            ref readonly SpriteInfo artInfo = ref Client.Game.UO.Arts.GetArt(graphic);
+            ref readonly SpriteInfo artInfo = ref GetCullArt(graphic);
 
             if (artInfo.Texture == null)
             {
                 return true;
             }
 
-            return screenY + SPRITE_BASE_OFFSET_PIXELS - artInfo.UV.Height > _maxPixel.Y;
+            return screenY + SPRITE_BASE_OFFSET_PIXELS - artInfo.UV.Height > _maxPixel.Y + margin;
         }
 
         /// <summary>
-        /// Tests whether a statics/multi sprite is fully outside the viewport left or right.
+        /// Tests whether a tile-anchored sprite is fully outside the viewport left or right.
         /// </summary>
         /// <remarks>
         /// These sprites are centered on their base tile (see <c>DrawStaticAnimated</c>), so a base
         /// X just past either horizontal edge can still have more than half the art on screen.
         /// Using the base X alone culls it and makes the art pop in from the side. The art width is
-        /// applied before culling; the sprite is kept while any column of it remains visible.
+        /// applied before culling; the sprite is kept while any column of it remains visible. Drop
+        /// shadows lean down-right, so they can also reach past the right edge by half the art
+        /// height and are given the same allowance.
         /// </remarks>
         /// <param name="screenX">Sprite base X in viewport space.</param>
         /// <param name="graphic">Graphic id whose art width defines the horizontal extent.</param>
+        /// <param name="margin">Extra reach (light halo) to keep while it still overlaps.</param>
+        /// <param name="castsShadow">Whether this sprite draws a skewed drop shadow.</param>
         /// <returns>True when no part of the sprite can be visible.</returns>
-        private bool IsSpriteOutsideHorizontally(int screenX, ushort graphic)
+        private bool IsSpriteOutsideHorizontally(int screenX, ushort graphic, int margin = 0, bool castsShadow = false)
         {
             if (screenX >= _minPixel.X && screenX <= _maxPixel.X)
             {
                 return false;
             }
 
-            ref readonly SpriteInfo artInfo = ref Client.Game.UO.Arts.GetArt(graphic);
+            ref readonly SpriteInfo artInfo = ref GetCullArt(graphic);
 
             if (artInfo.Texture == null)
             {
@@ -626,9 +699,11 @@ namespace ClassicUO.Game.Scenes
             }
 
             int width = artInfo.UV.Width;
+            int effectiveMargin = castsShadow ? Math.Max(margin, artInfo.UV.Height >> 1) : margin;
             int left = screenX + SPRITE_CENTER_OFFSET_PIXELS - (width >> 1);
 
-            return left + width < _minPixel.X || left > _maxPixel.X;
+            return left + width < _minPixel.X - effectiveMargin
+                || left > _maxPixel.X + effectiveMargin;
         }
 
         private static byte CalculateObjectHeight(ref int maxObjectZ, ref StaticTiles itemData)
@@ -688,7 +763,7 @@ namespace ClassicUO.Game.Scenes
 
                         if (tile.Z > obj.Z && (tile is Static || tile is Multi))
                         {
-                            ref StaticTiles itemData = ref Client.Game.UO.FileManager.TileData.StaticData[tile.Graphic];
+                            ref StaticTiles itemData = ref Client.Game.UO.FileManager.TileData.GetStaticTile(tile.Graphic);
 
                             if (itemData.IsNoShoot || itemData.IsWindow)
                             {
@@ -929,11 +1004,12 @@ namespace ClassicUO.Game.Scenes
 
                 if (screenX < _minPixel.X || screenX > _maxPixel.X)
                 {
-                    // Static/Multi sprites can be wider than their base tile, so part of them may
-                    // still be on screen; they get an exact, width-aware test in their case handlers.
-                    // Not a break: the tile list head is usually a Land, and breaking on its base X
-                    // would skip a wider static sharing the same tile.
-                    if (obj is not Static && obj is not Multi)
+                    // Static/Multi/Item sprites can be wider than their base tile (and light
+                    // sources out-reach it with their halo), so part of them may still be on screen;
+                    // they get an exact, extent-aware test in their case handlers. Not a break: the
+                    // tile list head is usually a Land, and breaking on its base X would skip a wider
+                    // static sharing the same tile.
+                    if (obj is not Static && obj is not Multi && obj is not Item)
                     {
                         continue;
                     }
@@ -1027,10 +1103,19 @@ namespace ClassicUO.Game.Scenes
                                 return itemData.Height != 0 && maxObjectZ - maxZ < height;
                             }
 
+                            int lightMargin = EmitsLight(obj, ref itemData) ? LightHaloCullMargin : 0;
+                            bool castsShadow = profile.ShadowsEnabled
+                                && profile.ShadowsStatics
+                                && (
+                                    StaticFilters.IsTree(obj.Graphic, out _)
+                                    || itemData.IsFoliage
+                                    || StaticFilters.IsRock(obj.Graphic)
+                                );
+
                             if (
-                                screenY < _minPixel.Y
-                                || IsBelowViewportBottom(screenY, obj.Graphic)
-                                || IsSpriteOutsideHorizontally(screenX, obj.Graphic)
+                                screenY < _minPixel.Y - lightMargin
+                                || IsBelowViewportBottom(screenY, obj.Graphic, lightMargin)
+                                || IsSpriteOutsideHorizontally(screenX, obj.Graphic, lightMargin, castsShadow)
                             )
                             {
                                 continue;
@@ -1039,15 +1124,7 @@ namespace ClassicUO.Game.Scenes
                             CheckIfBehindATree(obj, ref itemData);
 
                             // hacky way to render shadows without z-fight
-                            if (
-                                profile.ShadowsEnabled
-                                && profile.ShadowsStatics
-                                && (
-                                    StaticFilters.IsTree(obj.Graphic, out _)
-                                    || itemData.IsFoliage
-                                    || StaticFilters.IsRock(obj.Graphic)
-                                )
-                            )
+                            if (castsShadow)
                             {
                                 PushToRenderList(
                                     obj,
@@ -1117,10 +1194,19 @@ namespace ClassicUO.Game.Scenes
                                 return itemData.Height != 0 && maxObjectZ - maxZ < height;
                             }
 
+                            int lightMargin = EmitsLight(obj, ref itemData) ? LightHaloCullMargin : 0;
+                            bool castsShadow = profile.ShadowsEnabled
+                                && profile.ShadowsStatics
+                                && (
+                                    StaticFilters.IsTree(obj.Graphic, out _)
+                                    || itemData.IsFoliage
+                                    || StaticFilters.IsRock(obj.Graphic)
+                                );
+
                             if (
-                                screenY < _minPixel.Y
-                                || IsBelowViewportBottom(screenY, obj.Graphic)
-                                || IsSpriteOutsideHorizontally(screenX, obj.Graphic)
+                                screenY < _minPixel.Y - lightMargin
+                                || IsBelowViewportBottom(screenY, obj.Graphic, lightMargin)
+                                || IsSpriteOutsideHorizontally(screenX, obj.Graphic, lightMargin, castsShadow)
                             )
                             {
                                 continue;
@@ -1129,15 +1215,7 @@ namespace ClassicUO.Game.Scenes
                             CheckIfBehindATree(obj, ref itemData);
 
                             // hacky way to render shadows without z-fight
-                            if (
-                                profile.ShadowsEnabled
-                                && profile.ShadowsStatics
-                                && (
-                                    StaticFilters.IsTree(obj.Graphic, out _)
-                                    || itemData.IsFoliage
-                                    || StaticFilters.IsRock(obj.Graphic)
-                                )
-                            )
+                            if (castsShadow)
                             {
                                 PushToRenderList(
                                     obj,
@@ -1203,7 +1281,7 @@ namespace ClassicUO.Game.Scenes
                         {
                             ref StaticTiles itemData = ref (
                                 item.IsMulti
-                                    ? ref Client.Game.UO.FileManager.TileData.StaticData[item.MultiGraphic]
+                                    ? ref Client.Game.UO.FileManager.TileData.GetStaticTile(item.MultiGraphic)
                                     : ref item.ItemData
                             );
 
@@ -1263,9 +1341,34 @@ namespace ClassicUO.Game.Scenes
                                 return itemData.Height != 0 && maxObjectZ - maxZ < height;
                             }
 
-                            if (screenY < _minPixel.Y || screenY > _maxPixel.Y)
+                            if (item.IsCorpse)
                             {
-                                continue;
+                                // Corpses draw as animation frames, not base-anchored static art.
+                                if (
+                                    screenX < _minPixel.X
+                                    || screenX > _maxPixel.X
+                                    || screenY < _minPixel.Y
+                                    || screenY > _maxPixel.Y
+                                )
+                                {
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                // Ground items draw like statics (base-anchored, growing up), and
+                                // many are light sources, so they need the same extent-aware culling.
+                                int itemLightMargin = EmitsLight(obj, ref itemData) ? LightHaloCullMargin : 0;
+                                ushort itemGraphic = item.DisplayedGraphic;
+
+                                if (
+                                    screenY < _minPixel.Y - itemLightMargin
+                                    || IsBelowViewportBottom(screenY, itemGraphic, itemLightMargin)
+                                    || IsSpriteOutsideHorizontally(screenX, itemGraphic, itemLightMargin)
+                                )
+                                {
+                                    continue;
+                                }
                             }
 
                             if (!item.IsCorpse)
@@ -1297,7 +1400,7 @@ namespace ClassicUO.Game.Scenes
                         if (
                                             !ProcessAlpha(
                                                 obj,
-                                                ref Client.Game.UO.FileManager.TileData.StaticData[effect.Graphic],
+                                                ref Client.Game.UO.FileManager.TileData.GetStaticTile(effect.Graphic),
                                                 false,
                                                 ref playerScreePos,
                                                 cotZ,

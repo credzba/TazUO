@@ -12,12 +12,17 @@ using ClassicUO.Game;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
+using ClassicUO.Game.Managers.Hotkeys;
 using ClassicUO.Game.Managers.Structs;
 using ClassicUO.Game.Scenes;
+using ClassicUO.Game.ScreenDecorations.Manager;
+using ClassicUO.Game.ScreenDecorations.Shake;
 using ClassicUO.Game.UI;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Game.UI.Gumps;
+using ClassicUO.Game.UI.MyraWindows;
 using ClassicUO.LegionScripting.ApiClasses;
+using ClassicUO.LegionScripting.ApiClasses.VisualEffects;
 using ClassicUO.Network;
 using ClassicUO.Utility;
 using ClassicUO.Utility.Logging;
@@ -84,6 +89,7 @@ namespace ClassicUO.LegionScripting
             _cachedToken = CancellationToken.Token;
             Events = new EventSinkApi(this);
             Gumps = new ApiUiGump(this);
+            VisualEffects = new ApiVisualEffects(this);
         }
 
         #region MainThread Helpers
@@ -322,6 +328,14 @@ namespace ClassicUO.LegionScripting
             }
             _timedCallbacks.Clear();
 
+            // The leak guard for the visual effect API. An effect started with no duration, and any
+            // shake it fired, outlive the script by design - with the script gone there is nothing
+            // left that could take either down. Enqueued without the cancellation token, since by
+            // here the script is already cancelled and this still has to run.
+            MainThreadQueue.EnqueueAction(() => ScreenOverlayManager.Instance.StopScriptedByOwner(this));
+            ScreenShake.Viewport.CancelByOwner(this);
+            ScreenShake.Window.CancelByOwner(this);
+
             CancellationToken.Dispose();
         }
 
@@ -436,6 +450,12 @@ namespace ClassicUO.LegionScripting
         public ApiUiGump Gumps;
 
         /// <summary>
+        /// Full-screen visual effects and screen shake. Both ship switched off and a script cannot
+        /// override that; see `ApiVisualEffects`.
+        /// </summary>
+        public ApiVisualEffects VisualEffects;
+
+        /// <summary>
         /// Check if the script has been requested to stop.
         /// ```py
         /// while not API.StopRequested:
@@ -477,6 +497,39 @@ namespace ClassicUO.LegionScripting
             Account,
             Server,
             Global
+        }
+
+        /// <summary>
+        /// How a graphic effect created by `CreateEffect` behaves.
+        /// </summary>
+        public enum EffectType : byte
+        {
+            /// <summary>Travels from the source to the target.</summary>
+            Moving = 0x00,
+
+            /// <summary>Draws a lightning bolt from the source.</summary>
+            Lightning = 0x01,
+
+            /// <summary>Stationary, positioned at the source coordinates.</summary>
+            FixedXYZ = 0x02,
+
+            /// <summary>Stationary, follows the source serial (or source coordinates).</summary>
+            FixedFrom = 0x03,
+        }
+
+        /// <summary>
+        /// Blend mode used when drawing a graphic effect. Mirrors the values the server sends.
+        /// </summary>
+        public enum EffectBlendMode
+        {
+            Normal = 0x00,
+            Multiply = 0x01,
+            Screen = 0x02,
+            ScreenMore = 0x03,
+            ScreenLess = 0x04,
+            NormalHalfTransparent = 0x05,
+            ShadowBlue = 0x06,
+            ScreenRed = 0x07
         }
 
         #endregion
@@ -529,6 +582,80 @@ namespace ClassicUO.LegionScripting
         /// <param name="key">Key combination to check, e.g. "CTRL+SHIFT+F1".</param>
         /// <returns>True if the combination is currently pressed, false otherwise.</returns>
         public bool IsKeyPressed(string key) => OnMain(() => CUOKeyboard.IsKeyPressed(key));
+
+        /// <summary>
+        /// Shows the in-game hotkey capture window and waits for the player to pick a key combination.
+        /// The returned string matches what `OnHotKey` and `IsKeyPressed` accept, so it can be passed
+        /// straight to them, e.g. "CTRL+SHIFT+F1" or "A".
+        /// Only keyboard bindings are returned; mouse, wheel, controller and modifier-only captures are
+        /// rejected. Blocks until the player saves a key or closes the window (or the timeout elapses).
+        /// Example:
+        /// ```py
+        /// key = API.RequestHotkey()
+        /// if key:
+        ///   API.OnHotKey(key, on_pressed)
+        /// ```
+        /// </summary>
+        /// <param name="prompt">Optional message shown above the capture box.</param>
+        /// <param name="timeout">Maximum number of seconds to wait for the player to choose a hotkey.</param>
+        /// <returns>
+        /// The captured key combination, or an empty string if the player cancelled, closed the window
+        /// or the timeout elapsed.
+        /// </returns>
+        public string RequestHotkey(string prompt = "Press a hotkey", double timeout = 30)
+        {
+            object gate = new object();
+            string captured = null;
+
+            HotkeyCaptureWindow window = OnMain(() => new HotkeyCaptureWindow(
+                prompt,
+                existing: null,
+                onSaved: binding =>
+                {
+                    lock (gate)
+                        captured = BindingToKeyString(binding);
+                },
+                capturesMouseEvents: false,
+                bindingValidator: binding => binding.HasKey
+            ));
+
+            DateTime expire = DateTime.Now.AddSeconds(timeout);
+
+            while (DateTime.Now < expire && !StopRequested && !window.IsDisposed)
+            {
+                lock (gate)
+                    if (captured != null)
+                        return captured;
+
+                Thread.Sleep(5);
+            }
+
+            if (!window.IsDisposed)
+                OnMain(() => window.Dispose());
+
+            lock (gate)
+                return captured ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Converts a captured keyboard binding to the canonical key-string format used by the string
+        /// based hotkey APIs, e.g. "CTRL+SHIFT+F1". Returns an empty string for non-keyboard bindings.
+        /// </summary>
+        private static string BindingToKeyString(HotkeyBinding binding)
+        {
+            if (binding?.HasKey != true)
+                return string.Empty;
+
+            var parts = new List<string>();
+            if (binding.Ctrl) parts.Add("CTRL");
+            if (binding.Shift) parts.Add("SHIFT");
+            if (binding.Alt) parts.Add("ALT");
+
+            string keyName = binding.Key.ToString();
+            parts.Add(keyName.StartsWith("SDLK_", StringComparison.Ordinal) ? keyName.Substring(5) : keyName);
+
+            return string.Join("+", parts);
+        }
 
         /// <summary>
         /// Schedules a callback to be invoked after a specified delay.
@@ -1109,31 +1236,23 @@ namespace ClassicUO.LegionScripting
         /// <param name="amt">0 to grab entire stack</param>
         /// <param name="x">Offset from your location</param>
         /// <param name="y">Offset from your location</param>
-        /// <param name="z">Offset from your location. Leave blank in most cases</param>
+        /// <param name="z">Z offset from your location. Leave blank to auto-use the ground/static z at the destination tile</param>
         /// <param name="OSI">True if you are playing OSI</param>
-        public void QueueMoveItemOffset(uint serial, ushort amt = 0, int x = 0, int y = 0, int z = 0, bool OSI = false) => OnMain
+        public void QueueMoveItemOffset(uint serial, ushort amt = 0, int x = 0, int y = 0, int z = int.MinValue, bool OSI = false) => OnMain
         (() =>
             {
                 if (World?.Map == null || World?.Player == null)
                     return;
 
-                World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
-
-                bool useCalculatedZ = false;
-
-                if (gz > z)
+                if (z == int.MinValue)
                 {
-                    z = gz;
-                    useCalculatedZ = true;
+                    World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
+                    z = gz2 > gz ? gz2 : gz;
                 }
-                if (gz2 > z)
+                else
                 {
-                    z = gz2;
-                    useCalculatedZ = true;
-                }
-
-                if (!useCalculatedZ)
                     z = World.Player.Z + z;
+                }
 
                 ObjectActionQueue.Instance.Enqueue(new MoveRequest(serial, OSI ? uint.MaxValue : 0, amt, World.Player.X + x, World.Player.Y + y, z).ToObjectActionQueueItem(), ActionPriority.MoveItem);
             }
@@ -1153,31 +1272,23 @@ namespace ClassicUO.LegionScripting
         /// <param name="amt">0 to grab entire stack</param>
         /// <param name="x">Offset from your location</param>
         /// <param name="y">Offset from your location</param>
-        /// <param name="z">Offset from your location. Leave blank in most cases</param>
+        /// <param name="z">Z offset from your location. Leave blank to auto-use the ground/static z at the destination tile</param>
         /// <param name="OSI">True if you are playing OSI</param>
-        public void MoveItemOffset(uint serial, int amt = 0, int x = 0, int y = 0, int z = 0, bool OSI = false) => OnMain
+        public void MoveItemOffset(uint serial, int amt = 0, int x = 0, int y = 0, int z = int.MinValue, bool OSI = false) => OnMain
         (() =>
             {
                 if (World?.Map == null || World?.Player == null)
                     return;
 
-                World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
-
-                bool useCalculatedZ = false;
-
-                if (gz > z)
+                if (z == int.MinValue)
                 {
-                    z = gz;
-                    useCalculatedZ = true;
+                    World.Map.GetMapZ(World.Player.X + x, World.Player.Y + y, out sbyte gz, out sbyte gz2);
+                    z = gz2 > gz ? gz2 : gz;
                 }
-                if (gz2 > z)
+                else
                 {
-                    z = gz2;
-                    useCalculatedZ = true;
-                }
-
-                if (!useCalculatedZ)
                     z = World.Player.Z + z;
+                }
 
                 GameActions.PickUp(World, serial, 0, 0, amt);
                 GameActions.DropItem(serial, World.Player.X + x, World.Player.Y + y, z, OSI ? uint.MaxValue : 0);
@@ -2067,6 +2178,94 @@ namespace ClassicUO.LegionScripting
             (() => Game.Managers.CoolDownBarManager.CoolDownBarExists(name));
 
         /// <summary>
+        /// Creates and displays a graphic effect in the world, the same kind the server sends for spells,
+        /// projectiles, explosions, etc. This is a purely local, visual effect - no packet is sent and only
+        /// you see it.
+        /// The type decides how it behaves: `EffectType.FixedXYZ` and
+        /// `EffectType.FixedFrom` stay in place, `EffectType.Moving` travels from
+        /// the source to the target, and `EffectType.Lightning` draws a bolt from the source.
+        /// Positions come from the source/target serials when given, otherwise from the coordinates, which
+        /// default to the player's position.
+        /// Example:
+        /// ```py
+        /// # A stationary animation on the tile next to the player, for 2 seconds
+        /// API.CreateEffect(0x373A, sourceX=API.Player.X + 1, sourceY=API.Player.Y, hue=0x0481)
+        ///
+        /// # A projectile fired from the player at the nearest murderer
+        /// mob = API.NearestMobile([API.Notoriety.Murderer], 8)
+        /// if mob:
+        ///   API.CreateEffect(0x36D0, type=API.EffectType.Moving, source=API.Player, target=mob)
+        /// ```
+        /// </summary>
+        /// <param name="graphic">The animation/art graphic to draw.</param>
+        /// <param name="type">How the effect behaves. Defaults to a stationary effect.</param>
+        /// <param name="source">Serial of the source item/mobile. Takes priority over the source coordinates.</param>
+        /// <param name="target">Serial of the target item/mobile. Takes priority over the target coordinates.</param>
+        /// <param name="hue">Hue to color the effect. 0 means no hue.</param>
+        /// <param name="sourceX">Source X coordinate. Defaults to the player's X.</param>
+        /// <param name="sourceY">Source Y coordinate. Defaults to the player's Y.</param>
+        /// <param name="sourceZ">Source Z coordinate. Defaults to the player's Z.</param>
+        /// <param name="targetX">Target X coordinate. Defaults to the source X.</param>
+        /// <param name="targetY">Target Y coordinate. Defaults to the source Y.</param>
+        /// <param name="targetZ">Target Z coordinate. Defaults to the source Z.</param>
+        /// <param name="duration">How long the effect lasts, in seconds. 0 or less makes it last until it leaves the area.</param>
+        /// <param name="speed">Animation speed. 0 uses the default speed.</param>
+        /// <param name="fixedDirection">Hold the effect's direction instead of rotating it to face the target.</param>
+        /// <param name="doesExplode">Create an explosion at the target when a moving effect arrives.</param>
+        /// <param name="blendMode">How the effect is blended over the world.</param>
+        public void CreateEffect(
+            ushort graphic,
+            EffectType type = EffectType.FixedXYZ,
+            uint source = 0,
+            uint target = 0,
+            ushort hue = 0,
+            int? sourceX = null,
+            int? sourceY = null,
+            int? sourceZ = null,
+            int? targetX = null,
+            int? targetY = null,
+            int? targetZ = null,
+            double duration = 2,
+            byte speed = 0,
+            bool fixedDirection = false,
+            bool doesExplode = false,
+            EffectBlendMode blendMode = EffectBlendMode.Normal
+        ) => OnMain
+        (() =>
+            {
+                if (World?.Player == null)
+                    return;
+
+                int sx = sourceX ?? World.Player.X;
+                int sy = sourceY ?? World.Player.Y;
+                int sz = sourceZ ?? World.Player.Z;
+
+                int durationTicks = duration > 0 ? (int)(duration * 1000 / Constants.ITEM_EFFECT_ANIMATION_DELAY) : 0;
+
+                World.SpawnEffect
+                (
+                    (GraphicEffectType)type,
+                    source,
+                    target,
+                    graphic,
+                    hue,
+                    (ushort)sx,
+                    (ushort)sy,
+                    (sbyte)sz,
+                    (ushort)(targetX ?? sx),
+                    (ushort)(targetY ?? sy),
+                    (sbyte)(targetZ ?? sz),
+                    speed,
+                    durationTicks,
+                    fixedDirection,
+                    doesExplode,
+                    false,
+                    (GraphicEffectBlendMode)blendMode
+                );
+            }
+        );
+
+        /// <summary>
         /// Adds an item or mobile to your ignore list.
         /// These are unique lists per script. Ignoring an item in one script, will not affect other running scripts.
         /// Example:
@@ -2111,7 +2310,8 @@ namespace ClassicUO.LegionScripting
         public bool OnIgnoreList(uint serial) => _ignoreList.Contains(serial);
 
         /// <summary>
-        /// Attempt to pathfind to a location.  This will fail with large distances.
+        /// Attempt to pathfind to a location. The local pathfinder is tried first; if it cannot
+        /// find a path, the world-map pathfinder is used instead.
         /// Example:
         /// ```py
         /// API.Pathfind(1414, 1515)
@@ -2145,6 +2345,9 @@ namespace ClassicUO.LegionScripting
                 }
             );
 
+            if (!pathFindStatus)
+                return PathfindLongDistance(x, y, distance, wait, timeout, run);
+
             if (!wait)
                 return pathFindStatus;
 
@@ -2170,7 +2373,8 @@ namespace ClassicUO.LegionScripting
         }
 
         /// <summary>
-        /// Attempt to pathfind to a mobile or item.
+        /// Attempt to pathfind to a mobile or item. The local pathfinder is tried first; if it
+        /// cannot find a path, the world-map pathfinder is used instead.
         /// Example:
         /// ```py
         /// mob = API.NearestMobile([API.Notoriety.Gray, API.Notoriety.Criminal], 7)
@@ -2187,6 +2391,7 @@ namespace ClassicUO.LegionScripting
         public bool PathfindEntity(uint entity, int distance = 1, bool wait = false, int timeout = 10, bool run = true)
         {
             int x = 0, y = 0, z = 0;
+
             bool pathFindStatus = OnMain
             (() =>
                 {
@@ -2194,19 +2399,24 @@ namespace ClassicUO.LegionScripting
                         return false;
 
                     Entity mob = World.Get(entity);
-                    if (mob != null)
-                    {
-                        x = mob.X;
-                        y = mob.Y;
-                        z = mob.Z;
-                        return World.Player.Pathfinder.WalkTo(x, y, z, distance, run);
-                    }
+                    if (mob == null)
+                        return false;
 
-                    return false;
+                    x = mob.X;
+                    y = mob.Y;
+                    z = mob.Z;
+
+                    return World.Player.Pathfinder.WalkTo(x, y, z, distance, run);
                 }
             );
 
-            if (!wait || (x == 0 && y == 0))
+            if (x == 0 && y == 0)
+                return false;
+
+            if (!pathFindStatus)
+                return PathfindLongDistance(x, y, distance, wait, timeout, run);
+
+            if (!wait)
                 return pathFindStatus;
 
             if (timeout > 30)
@@ -2263,7 +2473,8 @@ namespace ClassicUO.LegionScripting
         });
 
         /// <summary>
-        /// Attempt to build a path to a location.  This will fail with large distances.
+        /// Attempt to build a path to a location. The local pathfinder is tried first; if it
+        /// cannot find a path, the world-map pathfinder is used instead.
         /// Example:
         /// ```py
         /// API.RequestTarget()
@@ -2279,8 +2490,9 @@ namespace ClassicUO.LegionScripting
         /// <param name="z"></param>
         /// <param name="distance">Distance away from goal to stop.</param>
         /// <returns>Returns a list of positions to reach the goal. Returns null if cannot find path.</returns>
-        public IList<ApiPoint3D> GetPath(int x, int y, int z = int.MinValue, int distance = 1) =>
-            OnMain(() =>
+        public IList<ApiPoint3D> GetPath(int x, int y, int z = int.MinValue, int distance = 1)
+        {
+            List<ApiPoint3D> localPath = OnMain(() =>
             {
                 if (World?.Player == null)
                     return null;
@@ -2299,6 +2511,183 @@ namespace ClassicUO.LegionScripting
                     ? null
                     : new List<ApiPoint3D>(path.Select(p => new ApiPoint3D { X = p.X, Y = p.Y, Z = p.Z }));
             });
+
+            if (localPath != null)
+                return localPath;
+
+            List<WorldMapPathfinder.PathPoint> worldPath = ComputeWorldMapPath(x, y, WorldMapPathfindWaitSeconds);
+
+            if (worldPath == null)
+                return null;
+
+            worldPath = TrimToStopDistance(worldPath, x, y, distance);
+
+            var result = new List<ApiPoint3D>(worldPath.Count + 1);
+
+            OnMain(() =>
+            {
+                if (World?.Player != null)
+                    result.Add(new ApiPoint3D { X = World.Player.X, Y = World.Player.Y, Z = World.Player.Z });
+            });
+
+            foreach (WorldMapPathfinder.PathPoint p in worldPath)
+                result.Add(new ApiPoint3D { X = p.X, Y = p.Y, Z = p.Z });
+
+            return result;
+        }
+
+        private const int WorldMapPathfindSnapRadius = 8;
+        private const int WorldMapPathfindWaitSeconds = 30;
+
+        /// <summary>
+        /// Runs a world-map pathfinder search and blocks the calling script thread until it
+        /// completes. Returns <c>null</c> when no path is found or the wait times out.
+        /// </summary>
+        /// <remarks>
+        /// The completion callback is dispatched to the main thread, so this cannot be called
+        /// from the main thread without deadlocking; that case returns <c>null</c>.
+        /// </remarks>
+        private List<WorldMapPathfinder.PathPoint> ComputeWorldMapPath(int x, int y, int timeoutSeconds)
+        {
+            if (MainThreadQueue.IsMainThread)
+            {
+                Log.Warn("[LegionAPI] Long-distance pathfinding cannot block the main thread.");
+                return null;
+            }
+
+            var completed = new ManualResetEventSlim(false);
+            List<WorldMapPathfinder.PathPoint> result = null;
+
+            bool started = OnMain(() =>
+            {
+                PlayerMobile player = World?.Player;
+                if (player?.Pathfinder == null || World.Map == null || WorldMapPathfinder.IsRunning)
+                    return false;
+
+                WorldMapPathfinder.ClearDynamicBlocks();
+                WorldMapPathfinder.FindPathAsync
+                (
+                    World.Map.Index,
+                    player.X,
+                    player.Y,
+                    player.Z,
+                    x,
+                    y,
+                    WorldMapPathfindSnapRadius,
+                    path =>
+                    {
+                        result = path;
+                        completed.Set();
+                    },
+                    WorldMapPathfinder.CaptureHouseMultis(World.HouseManager)
+                );
+
+                return true;
+            });
+
+            if (!started)
+                return null;
+
+            if (timeoutSeconds <= 0)
+                timeoutSeconds = 1;
+            else if (timeoutSeconds > WorldMapPathfindWaitSeconds)
+                timeoutSeconds = WorldMapPathfindWaitSeconds;
+
+            DateTime expire = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+
+            while (!completed.IsSet && !StopRequested && DateTime.UtcNow < expire)
+                completed.Wait(15);
+
+            if (!completed.IsSet)
+            {
+                WorldMapPathfinder.Cancel();
+                return null;
+            }
+
+            return result is { Count: > 0 } ? result : null;
+        }
+
+        /// <summary>
+        /// Truncates a world-map path so it ends on the first tile within
+        /// <paramref name="distance"/> of the destination, matching the stop behaviour of the
+        /// local pathfinder. Returns the full path when the destination was snapped and no
+        /// tile lies that close.
+        /// </summary>
+        private static List<WorldMapPathfinder.PathPoint> TrimToStopDistance(
+            List<WorldMapPathfinder.PathPoint> path,
+            int x,
+            int y,
+            int distance
+        )
+        {
+            if (distance <= 0)
+                return path;
+
+            for (int i = 0; i < path.Count; i++)
+            {
+                int dist = Math.Max(Math.Abs(path[i].X - x), Math.Abs(path[i].Y - y));
+
+                if (dist <= distance)
+                    return i == path.Count - 1 ? path : path.GetRange(0, i + 1);
+            }
+
+            return path;
+        }
+
+        /// <summary>
+        /// Starts a pre-computed world-map path, optionally waiting for the walk to finish.
+        /// Mirrors the local pathfinder's <see cref="Pathfinder.WalkTo"/> return/wait semantics.
+        /// </summary>
+        private bool PathfindLongDistance(int x, int y, int distance, bool wait, int timeout, bool run)
+        {
+            List<WorldMapPathfinder.PathPoint> path = ComputeWorldMapPath(x, y, timeout);
+
+            if (path == null)
+                return false;
+
+            path = TrimToStopDistance(path, x, y, distance);
+
+            var pathPoints = new List<(int X, int Y, int Z, int Direction)>(path.Count);
+
+            foreach (WorldMapPathfinder.PathPoint p in path)
+                pathPoints.Add((p.X, p.Y, p.Z, p.Direction));
+
+            bool started = OnMain(() =>
+            {
+                PlayerMobile player = World?.Player;
+                if (player?.Pathfinder == null)
+                    return false;
+
+                player.Pathfinder.StopAutoWalk();
+                player.Pathfinder.StartComputedPath(pathPoints, run);
+                return player.Pathfinder.AutoWalking;
+            });
+
+            if (!started)
+                return false;
+
+            if (!wait)
+                return true;
+
+            if (timeout > 30)
+                timeout = 30;
+
+            DateTime expire = DateTime.Now.AddSeconds(timeout);
+
+            while (OnMain(() => World.Player?.Pathfinder?.AutoWalking == true) && !StopRequested)
+            {
+                if (DateTime.Now >= expire)
+                {
+                    OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
+                    return false;
+                }
+
+                Thread.Sleep(1);
+            }
+
+            OnMain(() => World.Player?.Pathfinder?.StopAutoWalk());
+            return OnMain(() => World.Player != null && World.Player.DistanceFrom(new Vector2(x, y)) <= distance);
+        }
 
         /// <summary>
         /// Automatically follow a mobile. This is different from pathfinding. This will continue to follow the mobile.
@@ -2419,7 +2808,7 @@ namespace ClassicUO.LegionScripting
         /// API.Mount(0x12345678)
         /// ```
         /// </summary>
-        /// <param name="serial">Defaults to saved mount</param>
+        /// <param name="serial">Creature or mount item serial. Defaults to saved mount</param>
         /// <param name="skipQueue">Defaults true, set to false to use a double click queue</param>
         public void Mount(uint serial = uint.MaxValue, bool skipQueue = true) => OnMain
         (() =>
@@ -2437,7 +2826,7 @@ namespace ClassicUO.LegionScripting
         /// <summary>
         /// This will set your saved mount for this character.
         /// </summary>
-        /// <param name="serial"></param>
+        /// <param name="serial">Creature or mount item serial.</param>
         public void SetMount(uint serial) => OnMain(() =>
         {
             ProfileManager.CurrentProfile.SavedMountSerial = serial;
@@ -3677,14 +4066,13 @@ namespace ClassicUO.LegionScripting
         }
 
         /// <summary>
-        /// Clear your journal(This is specific for each script).
+        /// Clear your journal (This is specific for each script).
         /// Supports regex matching if prefixed with $
         /// Example:
         /// ```py
         /// API.ClearJournal()
         /// ```
         /// </summary>
-        /// <param name=""></param>
         /// <param name="matchingEntries">String or regex to match with. If this is set, only matching entries will be removed.</param>
         public void ClearJournal(string matchingEntries = "")
         {

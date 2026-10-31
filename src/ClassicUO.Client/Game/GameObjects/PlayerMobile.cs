@@ -802,7 +802,7 @@ namespace ClassicUO.Game.GameObjects
 
                 run |= ProfileManager.CurrentProfile.AlwaysRun;
 
-                if (SpeedMode >= CharacterSpeedType.CantRun || Stamina <= 1 && !IsDead || IsHidden && ProfileManager.CurrentProfile.AlwaysRunUnlessHidden)
+                if (SpeedMode >= CharacterSpeedType.CantRun || Stamina <= 1 && !IsDead || IsHidden && !IsDead && ProfileManager.CurrentProfile.AlwaysRunUnlessHidden)
                 {
                     run = false;
                 }
@@ -1017,7 +1017,7 @@ namespace ClassicUO.Game.GameObjects
 
             run |= ProfileManager.CurrentProfile.AlwaysRun;
 
-            if (SpeedMode >= CharacterSpeedType.CantRun || Stamina <= 1 && !IsDead || IsHidden && ProfileManager.CurrentProfile.AlwaysRunUnlessHidden)
+            if (SpeedMode >= CharacterSpeedType.CantRun || Stamina <= 1 && !IsDead || IsHidden && !IsDead && ProfileManager.CurrentProfile.AlwaysRunUnlessHidden)
             {
                 run = false;
             }
